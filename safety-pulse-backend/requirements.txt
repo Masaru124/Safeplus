@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+sqlalchemy
+psycopg2-binary
+redis
+pydantic
+alembic
+geopy
+pygeohash
+fastapi-limiter
+python-multipart
+httpx
