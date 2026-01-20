@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/safety.dart';
 import '../services/api_service.dart';
-import '../utils/safety_utils.dart';
 
 class SafetyProvider with ChangeNotifier {
   List<SafetyReport> _reports = [];
@@ -16,8 +15,8 @@ class SafetyProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  /// Initialize reports - fetch only from API
-  void initializeReports() async {
+  /// Initialize reports - fetch only from API (requires token)
+  void initializeReports({required String token}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -26,12 +25,13 @@ class SafetyProvider with ChangeNotifier {
     final centerLng = _userLocation?.longitude ?? -73.9857;
 
     try {
-      // Fetch from backend
+      // Fetch from backend with authentication
       final reports = await _apiService.fetchReports(
         lat: centerLat,
         lng: centerLng,
         radius: 10.0,
         timeWindow: '24h',
+        token: token,
       );
 
       _reports = reports;
@@ -47,19 +47,19 @@ class SafetyProvider with ChangeNotifier {
   }
 
   /// Set user location and fetch nearby reports
-  void setUserLocation(MapLocation location) {
+  void setUserLocation(MapLocation location, {required String token}) {
     _userLocation = location;
-    initializeReports();
+    initializeReports(token: token);
   }
 
-  /// Add a new report (submits to API)
-  void addReport(SafetyReport report) async {
+  /// Add a new report (submits to API, requires authentication)
+  void addReport(SafetyReport report, {required String token}) async {
     // Get the signal type and severity from the category
     final signalType = categoryToSignalType[report.category] ?? 'other';
     final severity = categoryToSeverity[report.category] ?? 3;
 
     try {
-      // Submit to backend
+      // Submit to backend with authentication
       await _apiService.submitReport(
         signalType: signalType,
         severity: severity,
@@ -69,6 +69,7 @@ class SafetyProvider with ChangeNotifier {
           'category': report.category,
           'description': report.description,
         },
+        token: token,
       );
 
       // Add to local list for immediate feedback
@@ -83,7 +84,7 @@ class SafetyProvider with ChangeNotifier {
   }
 
   /// Refresh reports from API
-  Future<void> refreshReports() async {
+  Future<void> refreshReports({required String token}) async {
     if (_userLocation == null) return;
 
     _isLoading = true;
@@ -96,6 +97,7 @@ class SafetyProvider with ChangeNotifier {
         lng: _userLocation!.longitude,
         radius: 10.0,
         timeWindow: '24h',
+        token: token,
       );
       _reports = reports;
     } catch (e) {
@@ -110,5 +112,126 @@ class SafetyProvider with ChangeNotifier {
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  // ==================== Report Voting ====================
+
+  /// Vote on a report (true = accurate, false = inaccurate)
+  void voteOnReport({
+    required String signalId,
+    required bool isTrue,
+    required String token,
+  }) async {
+    try {
+      // Call API to vote
+      final response = await _apiService.voteOnReport(
+        signalId: signalId,
+        isTrue: isTrue,
+        token: token,
+      );
+
+      // Update the report in local list
+      final index = _reports.indexWhere((r) => r.id == signalId);
+      if (index != -1) {
+        final report = _reports[index];
+        _reports[index] = SafetyReport(
+          id: report.id,
+          latitude: report.latitude,
+          longitude: report.longitude,
+          level: report.level,
+          category: report.category,
+          description: report.description,
+          timestamp: report.timestamp,
+          opacity: report.opacity,
+          trustScore: response.updatedTrustScore,
+          reporterUsername: report.reporterUsername,
+          trueVotes: response.newTrueVotes,
+          falseVotes: response.newFalseVotes,
+          userVote: isTrue,
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to vote: ${e.toString()}';
+      notifyListeners();
+    }
+  }
+
+  /// Remove vote from a report
+  void removeVote({required String signalId, required String token}) async {
+    try {
+      // Call API to remove vote
+      final response = await _apiService.removeVote(
+        signalId: signalId,
+        token: token,
+      );
+
+      // Update the report in local list
+      final index = _reports.indexWhere((r) => r.id == signalId);
+      if (index != -1) {
+        final report = _reports[index];
+        _reports[index] = SafetyReport(
+          id: report.id,
+          latitude: report.latitude,
+          longitude: report.longitude,
+          level: report.level,
+          category: report.category,
+          description: report.description,
+          timestamp: report.timestamp,
+          opacity: report.opacity,
+          trustScore: response.updatedTrustScore,
+          reporterUsername: report.reporterUsername,
+          trueVotes: response.newTrueVotes,
+          falseVotes: response.newFalseVotes,
+          userVote: null, // No vote after removal
+        );
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = 'Failed to remove vote: ${e.toString()}';
+      notifyListeners();
+    }
+  }
+
+  /// Get vote summary for a report
+  Future<VoteSummary> getVoteSummary({
+    required String signalId,
+    required String token,
+  }) async {
+    return await _apiService.getVoteSummary(signalId: signalId, token: token);
+  }
+
+  /// Check if user has voted on a report
+  Future<bool> hasUserVoted({
+    required String signalId,
+    required String token,
+  }) async {
+    try {
+      final response = await _apiService.checkUserVote(
+        signalId: signalId,
+        token: token,
+      );
+      return response.hasVoted;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /// Delete a report (only owner can delete)
+  Future<bool> deleteReport({
+    required String signalId,
+    required String token,
+  }) async {
+    try {
+      await _apiService.deleteReport(signalId: signalId, token: token);
+      // Remove from local list
+      _reports.removeWhere((r) => r.id == signalId);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = 'Failed to delete report: ${e.toString()}';
+      notifyListeners();
+      return false;
+    }
   }
 }

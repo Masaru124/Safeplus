@@ -10,3 +10,5 @@ pygeohash
 fastapi-limiter
 python-multipart
 httpx
+bcrypt
+python-jose[cryptography]

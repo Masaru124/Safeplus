@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routes import report, pulse, health
+from app.routes import report, pulse, health, auth
 from app.database import engine
 from app.models import Base
 from app.middleware.rate_limiter import RateLimiterMiddleware
@@ -23,6 +23,7 @@ app.add_middleware(
 app.add_middleware(RateLimiterMiddleware)
 
 # Include routers
+app.include_router(auth.router, prefix="/api/v1", tags=["authentication"])
 app.include_router(report.router, prefix="/api/v1", tags=["report"])
 app.include_router(pulse.router, prefix="/api/v1", tags=["pulse"])
 app.include_router(health.router, tags=["health"])

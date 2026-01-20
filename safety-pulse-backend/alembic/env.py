@@ -4,6 +4,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+from sqlalchemy import create_engine
 
 from alembic import context
 
@@ -17,9 +18,17 @@ from app.models import Base
 # access to the values within the .ini file in use.
 config = context.config
 
+# Set the database URL
+config.set_main_option("sqlalchemy.url", "sqlite:///./safety_pulse.db")
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-fileConfig(config.config_file_name)
+if config.config_file_name:
+    try:
+        fileConfig(config.config_file_name)
+    except Exception:
+        # If fileConfig fails, continue without logging setup
+        pass
 
 # add your model's MetaData object here
 # for 'autogenerate' support
@@ -62,11 +71,8 @@ def run_migrations_online():
     and associate a connection with the context.
 
     """
-    connectable = engine_from_config(
-        config.get_section(config.config_file_name),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    url = config.get_main_option("sqlalchemy.url")
+    connectable = create_engine(url)
 
     with connectable.connect() as connection:
         context.configure(
@@ -81,3 +87,4 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
+

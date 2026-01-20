@@ -4,8 +4,10 @@ import 'package:geolocator/geolocator.dart';
 import 'package:provider/provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'providers/safety_provider.dart';
+import 'providers/auth_provider.dart';
 import 'widgets/safety_map.dart';
 import 'models/safety.dart';
+import 'models/user.dart';
 
 void main() {
   runApp(const SafetyPulseApp());
@@ -16,15 +18,270 @@ class SafetyPulseApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (context) => SafetyProvider(),
+    return MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+        ChangeNotifierProvider(create: (context) => SafetyProvider()),
+      ],
       child: MaterialApp(
         title: 'Safety Pulse',
         theme: ThemeData(
           colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
           useMaterial3: true,
         ),
-        home: const HomePage(),
+        home: const AuthWrapper(),
+      ),
+    );
+  }
+}
+
+/// Auth wrapper - shows login if not authenticated, home page if authenticated
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    // Initialize auth state on app start
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<AuthProvider>().initialize();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
+    if (authProvider.isLoading) {
+      // Loading screen while checking auth state
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Loading...'),
+            ],
+          ),
+        ),
+      );
+    }
+
+    if (authProvider.isAuthenticated) {
+      // User is logged in, show the main app
+      return const HomePage();
+    }
+
+    // User is not logged in, show login screen
+    return const LoginScreen();
+  }
+}
+
+/// Login screen with registration option
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  final _usernameController = TextEditingController();
+
+  bool _isLogin = true;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final authProvider = context.read<AuthProvider>();
+    bool success;
+
+    if (_isLogin) {
+      success = await authProvider.login(
+        _emailController.text,
+        _passwordController.text,
+      );
+    } else {
+      success = await authProvider.register(
+        _emailController.text,
+        _usernameController.text,
+        _passwordController.text,
+      );
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (success) {
+      if (mounted) {
+        // Get the token and initialize safety provider
+        final token = authProvider.token!;
+        context.read<SafetyProvider>().initializeReports(token: token);
+
+        // Navigate to home
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const HomePage()),
+        );
+      }
+    } else {
+      setState(() {
+        _errorMessage = authProvider.error ?? 'An error occurred';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(_isLogin ? 'Login' : 'Create Account')),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Form(
+          key: _formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 40),
+                const Icon(Icons.security, size: 80, color: Colors.blue),
+                const SizedBox(height: 16),
+                Text(
+                  _isLogin ? 'Welcome Back' : 'Create Account',
+                  style: Theme.of(context).textTheme.headlineMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  _isLogin
+                      ? 'Sign in to report and view safety data'
+                      : 'Sign up to start using Safety Pulse',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 32),
+                if (_errorMessage != null)
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Colors.red.shade800),
+                    ),
+                  ),
+                if (_errorMessage != null) const SizedBox(height: 16),
+                if (!_isLogin)
+                  TextFormField(
+                    controller: _usernameController,
+                    decoration: const InputDecoration(
+                      labelText: 'Username',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.person),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.length < 3) {
+                        return 'Username must be at least 3 characters';
+                      }
+                      return null;
+                    },
+                  ),
+                if (!_isLogin) const SizedBox(height: 16),
+                TextFormField(
+                  controller: _emailController,
+                  decoration: const InputDecoration(
+                    labelText: 'Email',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.email),
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Email is required';
+                    }
+                    if (!value.contains('@')) {
+                      return 'Please enter a valid email';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _passwordController,
+                  decoration: const InputDecoration(
+                    labelText: 'Password',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
+                  ),
+                  obscureText: true,
+                  validator: (value) {
+                    if (value == null || value.length < 6) {
+                      return 'Password must be at least 6 characters';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(_isLogin ? 'Login' : 'Create Account'),
+                ),
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          setState(() {
+                            _isLogin = !_isLogin;
+                            _errorMessage = null;
+                          });
+                        },
+                  child: Text(
+                    _isLogin
+                        ? "Don't have an account? Sign up"
+                        : 'Already have an account? Login',
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -38,7 +295,7 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  bool _locationRequested = false;
+  final bool _locationRequested = false;
   bool _isLoadingLocation = true;
 
   @override
@@ -52,13 +309,27 @@ class _HomePageState extends State<HomePage> {
       _isLoadingLocation = true;
     });
 
+    // Get auth token
+    final authProvider = context.read<AuthProvider>();
+    final token = authProvider.token;
+
+    if (token == null) {
+      // Not authenticated, go to login
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (context) => const LoginScreen()),
+        );
+      }
+      return;
+    }
+
     try {
       // First check if location service is enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
           _showSnackBar('Please enable location services');
-          _initializeWithDefaultLocation();
+          _initializeWithDefaultLocation(token: token);
         }
         return;
       }
@@ -97,16 +368,17 @@ class _HomePageState extends State<HomePage> {
               latitude: position.latitude,
               longitude: position.longitude,
             ),
+            token: token,
           );
         }
       } else {
         // Permission denied, use default location
         if (mounted) {
           _showSnackBar('Location permission denied');
-          _initializeWithDefaultLocation();
+          _initializeWithDefaultLocation(token: token);
         }
       }
-    } on TimeoutException catch (e) {
+    } on TimeoutException {
       // Timeout, try getting last known position
       if (mounted) {
         try {
@@ -120,28 +392,30 @@ class _HomePageState extends State<HomePage> {
                 latitude: lastPosition.latitude,
                 longitude: lastPosition.longitude,
               ),
+              token: token,
             );
             return;
           }
         } catch (_) {}
         _showSnackBar('Location request timed out');
-        _initializeWithDefaultLocation();
+        _initializeWithDefaultLocation(token: token);
       }
     } catch (e) {
       // If getting location fails, use default location
       if (mounted) {
         _showSnackBar('Could not get location: ${e.toString()}');
-        _initializeWithDefaultLocation();
+        _initializeWithDefaultLocation(token: token);
       }
     }
   }
 
-  void _initializeWithDefaultLocation() {
+  void _initializeWithDefaultLocation({required String token}) {
     setState(() {
       _isLoadingLocation = false;
     });
     context.read<SafetyProvider>().setUserLocation(
       const MapLocation(latitude: 40.7484, longitude: -73.9857),
+      token: token,
     );
   }
 
@@ -162,13 +436,36 @@ class _HomePageState extends State<HomePage> {
     ).showSnackBar(SnackBar(content: Text(message)));
   }
 
+  void _logout() async {
+    await context.read<AuthProvider>().logout();
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (context) => const LoginScreen()),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final safetyProvider = context.watch<SafetyProvider>();
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Safety Pulse'),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         actions: [
+          // Show username if logged in
+          if (authProvider.user != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Center(
+                child: Text(
+                  '@${authProvider.user!.username}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.my_location),
             tooltip: 'Get My Location',
@@ -177,7 +474,17 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh Data',
-            onPressed: () => context.read<SafetyProvider>().refreshReports(),
+            onPressed: () {
+              final token = authProvider.token;
+              if (token != null) {
+                safetyProvider.refreshReports(token: token);
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            tooltip: 'Logout',
+            onPressed: _logout,
           ),
         ],
       ),
@@ -190,6 +497,9 @@ class _HomePageState extends State<HomePage> {
               provider.clearError();
             });
           }
+
+          // Get token for API calls
+          final token = authProvider.token;
 
           return Stack(
             children: [
@@ -333,7 +643,14 @@ class _ReportDialogState extends State<ReportDialog> {
       opacity: 1.0,
     );
 
-    context.read<SafetyProvider>().addReport(report);
+    // Get auth token
+    final authProvider = context.read<AuthProvider>();
+    final token = authProvider.token;
+
+    if (token != null) {
+      context.read<SafetyProvider>().addReport(report, token: token);
+    }
+
     Navigator.of(context).pop();
   }
 

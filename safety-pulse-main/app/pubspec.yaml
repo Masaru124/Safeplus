@@ -51,6 +51,9 @@ dependencies:
   # Cryptography for device hashing
   crypto: ^3.0.5
 
+  # Local storage for auth tokens
+  shared_preferences: ^2.5.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

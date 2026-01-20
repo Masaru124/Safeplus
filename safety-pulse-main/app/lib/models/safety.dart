@@ -12,6 +12,15 @@ class SafetyReport {
   final DateTime timestamp;
   final double opacity;
   final double? trustScore;
+  final String? reporterUsername; // Added field for reporter info
+  final String?
+  userId; // ID of the user who created this report (for ownership check)
+
+  // Vote-related fields for trust score calculation
+  final int trueVotes;
+  final int falseVotes;
+  final bool?
+  userVote; // User's vote: true = accurate, false = inaccurate, null = no vote
 
   SafetyReport({
     required this.id,
@@ -23,7 +32,26 @@ class SafetyReport {
     required this.timestamp,
     required this.opacity,
     this.trustScore,
+    this.reporterUsername,
+    this.userId,
+    this.trueVotes = 0,
+    this.falseVotes = 0,
+    this.userVote,
   });
+
+  /// Total number of votes
+  int get totalVotes => trueVotes + falseVotes;
+
+  /// Trust ratio (true votes / total votes)
+  double get trustRatio => totalVotes > 0 ? trueVotes / totalVotes : 0.5;
+
+  /// Whether the current user has voted on this report
+  bool get hasUserVoted => userVote != null;
+
+  /// Whether the current user owns this report
+  bool isOwnedBy(String? currentUserId) {
+    return currentUserId != null && userId != null && currentUserId == userId;
+  }
 
   /// Create SafetyReport from backend JSON response
   factory SafetyReport.fromBackendJson(Map<String, dynamic> json) {
@@ -32,6 +60,14 @@ class SafetyReport {
     final createdAt =
         json['created_at'] as String? ?? DateTime.now().toIso8601String();
     final trustScore = (json['trust_score'] as num?)?.toDouble() ?? 0.5;
+
+    // Vote fields
+    final trueVotes = json['true_votes'] as int? ?? 0;
+    final falseVotes = json['false_votes'] as int? ?? 0;
+    final userVote = json['user_vote'] as bool?;
+
+    // User ID for ownership check
+    final userId = json['user_id'] as String?;
 
     // Determine safety level from severity
     SafetyLevel level;
@@ -63,6 +99,11 @@ class SafetyReport {
       timestamp: timestamp,
       opacity: opacity,
       trustScore: trustScore,
+      reporterUsername: json['reporter_username'] as String?,
+      userId: userId,
+      trueVotes: trueVotes,
+      falseVotes: falseVotes,
+      userVote: userVote,
     );
   }
 

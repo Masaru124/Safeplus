@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import '../models/safety.dart';
+import '../models/user.dart';
+import '../providers/auth_provider.dart';
 
 /// API Service for Safety Pulse Backend
 class ApiService {
@@ -14,13 +16,93 @@ class ApiService {
     return sha256.convert(bytes).toString();
   }
 
-  /// Submit a safety report to the backend
+  // ==================== Authentication ====================
+
+  /// Login with email and password
+  Future<AuthToken> login(String email, String password) async {
+    final url = Uri.parse('$baseUrl/api/v1/auth/login');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'email': email, 'password': password}),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return AuthToken.fromJson(data);
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: errorData['detail'] ?? 'Login failed',
+      );
+    }
+  }
+
+  /// Register a new user
+  Future<AuthToken> register(
+    String email,
+    String username,
+    String password,
+  ) async {
+    final url = Uri.parse('$baseUrl/api/v1/auth/register');
+
+    final response = await http.post(
+      url,
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'email': email,
+        'username': username,
+        'password': password,
+      }),
+    );
+
+    if (response.statusCode == 201) {
+      final data = jsonDecode(response.body);
+      return AuthToken.fromJson(data);
+    } else {
+      final errorData = jsonDecode(response.body);
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: errorData['detail'] ?? 'Registration failed',
+      );
+    }
+  }
+
+  /// Get current user info
+  Future<User> getCurrentUser(String token) async {
+    final url = Uri.parse('$baseUrl/api/v1/auth/me');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return User.fromJson(data);
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: 'Failed to get user info',
+      );
+    }
+  }
+
+  // ==================== Safety Reports ====================
+
+  /// Submit a safety report to the backend (requires authentication)
   Future<ReportResponse> submitReport({
     required String signalType,
     required int severity,
     required double latitude,
     required double longitude,
     Map<String, dynamic>? context,
+    required String token,
   }) async {
     final url = Uri.parse('$baseUrl/api/v1/report');
 
@@ -36,9 +118,7 @@ class ApiService {
       url,
       headers: {
         'Content-Type': 'application/json',
-        'X-Device-Hash': getDeviceHash(
-          'flutter-device-${DateTime.now().millisecondsSinceEpoch}',
-        ),
+        'Authorization': 'Bearer $token',
       },
       body: body,
     );
@@ -54,43 +134,13 @@ class ApiService {
     }
   }
 
-  /// Fetch pulse data from the backend
-  Future<List<PulseTile>> fetchPulseData({
-    required double lat,
-    required double lng,
-    double radius = 10.0,
-    String timeWindow = '24h',
-  }) async {
-    final url = Uri.parse('$baseUrl/api/v1/pulse').replace(
-      queryParameters: {
-        'lat': lat.toString(),
-        'lng': lng.toString(),
-        'radius': radius.toString(),
-        'time_window': timeWindow,
-      },
-    );
-
-    final response = await http.get(url);
-
-    if (response.statusCode == 200) {
-      final data = jsonDecode(response.body);
-      final List<dynamic> tiles = data['tiles'] ?? [];
-      return tiles.map((tile) => PulseTile.fromJson(tile)).toList();
-    } else {
-      throw ApiException(
-        statusCode: response.statusCode,
-        message:
-            jsonDecode(response.body)['detail'] ?? 'Failed to fetch pulse data',
-      );
-    }
-  }
-
-  /// Fetch safety reports from the backend
+  /// Fetch safety reports from the backend (requires authentication)
   Future<List<SafetyReport>> fetchReports({
     required double lat,
     required double lng,
     double radius = 10.0,
     String timeWindow = '24h',
+    required String token,
   }) async {
     final url = Uri.parse('$baseUrl/api/v1/reports').replace(
       queryParameters: {
@@ -101,7 +151,13 @@ class ApiService {
       },
     );
 
-    final response = await http.get(url);
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -112,6 +168,185 @@ class ApiService {
         statusCode: response.statusCode,
         message:
             jsonDecode(response.body)['detail'] ?? 'Failed to fetch reports',
+      );
+    }
+  }
+
+  // ==================== Report Voting ====================
+
+  /// Vote on a report (true = accurate, false = inaccurate)
+  /// Requires authentication
+  Future<VoteResponse> voteOnReport({
+    required String signalId,
+    required bool isTrue,
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/reports/$signalId/vote');
+
+    final body = jsonEncode({'is_true': isTrue});
+
+    final response = await http.post(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      return VoteResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message:
+            jsonDecode(response.body)['detail'] ?? 'Failed to vote on report',
+      );
+    }
+  }
+
+  /// Remove vote from a report
+  /// Requires authentication
+  Future<VoteResponse> removeVote({
+    required String signalId,
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/reports/$signalId/vote');
+
+    final response = await http.delete(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return VoteResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: jsonDecode(response.body)['detail'] ?? 'Failed to remove vote',
+      );
+    }
+  }
+
+  /// Get vote summary for a report
+  /// Requires authentication
+  Future<VoteSummary> getVoteSummary({
+    required String signalId,
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/reports/$signalId/votes');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return VoteSummary.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message:
+            jsonDecode(response.body)['detail'] ?? 'Failed to get vote summary',
+      );
+    }
+  }
+
+  /// Check if current user has voted on a report
+  /// Requires authentication
+  Future<VoteCheckResponse> checkUserVote({
+    required String signalId,
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/reports/$signalId/vote/check');
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return VoteCheckResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message: jsonDecode(response.body)['detail'] ?? 'Failed to check vote',
+      );
+    }
+  }
+
+  /// Delete a report (only the owner can delete their report)
+  /// Requires authentication
+  Future<DeleteReportResponse> deleteReport({
+    required String signalId,
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/reports/$signalId');
+
+    final response = await http.delete(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      return DeleteReportResponse.fromJson(jsonDecode(response.body));
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message:
+            jsonDecode(response.body)['detail'] ?? 'Failed to delete report',
+      );
+    }
+  }
+
+  // ==================== Pulse Data ====================
+
+  /// Fetch pulse data from the backend (requires authentication)
+  Future<List<PulseTile>> fetchPulseData({
+    required double lat,
+    required double lng,
+    double radius = 10.0,
+    String timeWindow = '24h',
+    required String token,
+  }) async {
+    final url = Uri.parse('$baseUrl/api/v1/pulse').replace(
+      queryParameters: {
+        'lat': lat.toString(),
+        'lng': lng.toString(),
+        'radius': radius.toString(),
+        'time_window': timeWindow,
+      },
+    );
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      final List<dynamic> tiles = data['tiles'] ?? [];
+      return tiles.map((tile) => PulseTile.fromJson(tile)).toList();
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message:
+            jsonDecode(response.body)['detail'] ?? 'Failed to fetch pulse data',
       );
     }
   }
@@ -141,7 +376,7 @@ class ApiService {
     DateTime timestamp;
     final createdAtValue = json['created_at'];
     if (createdAtValue is String) {
-      // ISO 8601 format from JSON
+      // ISO 8601 format from JSON - try to parse
       timestamp = DateTime.tryParse(createdAtValue) ?? DateTime.now();
     } else if (createdAtValue is int) {
       // Unix timestamp in milliseconds
@@ -149,7 +384,7 @@ class ApiService {
     } else if (createdAtValue is Map<String, dynamic>) {
       // Pydantic datetime dict format
       final isoString = createdAtValue[r'$date'];
-      if (isoString != null) {
+      if (isoString != null && isoString is String) {
         timestamp = DateTime.tryParse(isoString) ?? DateTime.now();
       } else {
         timestamp = DateTime.now();
@@ -177,8 +412,35 @@ class ApiService {
         json['context_tags'] as Map<String, dynamic>?;
     String? description = context?['description'] as String?;
 
-    // Get trust score from response
-    final trustScore = (json['trust_score'] as num?)?.toDouble() ?? 0.5;
+    // Get trust score from response - ensure it's not null
+    double trustScoreValue = 0.5;
+    final trustScoreRaw = json['trust_score'];
+    if (trustScoreRaw != null) {
+      if (trustScoreRaw is double) {
+        trustScoreValue = trustScoreRaw;
+      } else if (trustScoreRaw is int) {
+        trustScoreValue = trustScoreRaw.toDouble();
+      } else if (trustScoreRaw is num) {
+        trustScoreValue = trustScoreRaw.toDouble();
+      }
+    }
+
+    // Get reporter username
+    String? reporterUsername = json['reporter_username'] as String?;
+
+    // Get user ID (report owner's ID) - can be string or UUID object
+    String? userId;
+    final userIdValue = json['user_id'];
+    if (userIdValue is String) {
+      userId = userIdValue;
+    } else if (userIdValue != null) {
+      userId = userIdValue.toString();
+    }
+
+    // Get vote counts
+    int trueVotes = json['true_votes'] as int? ?? 0;
+    int falseVotes = json['false_votes'] as int? ?? 0;
+    bool? userVote = json['user_vote'] as bool?;
 
     return SafetyReport(
       id: id,
@@ -189,7 +451,12 @@ class ApiService {
       description: description,
       timestamp: timestamp,
       opacity: opacity,
-      trustScore: trustScore,
+      trustScore: trustScoreValue,
+      reporterUsername: reporterUsername,
+      userId: userId,
+      trueVotes: trueVotes,
+      falseVotes: falseVotes,
+      userVote: userVote,
     );
   }
 
@@ -231,6 +498,102 @@ class ReportResponse {
       message: json['message'],
       signalId: json['signal_id'],
       trustScore: json['trust_score'].toDouble(),
+    );
+  }
+}
+
+/// Vote Response model
+class VoteResponse {
+  final String message;
+  final String signalId;
+  final bool isTrue;
+  final int newTrueVotes;
+  final int newFalseVotes;
+  final double updatedTrustScore;
+
+  VoteResponse({
+    required this.message,
+    required this.signalId,
+    required this.isTrue,
+    required this.newTrueVotes,
+    required this.newFalseVotes,
+    required this.updatedTrustScore,
+  });
+
+  factory VoteResponse.fromJson(Map<String, dynamic> json) {
+    return VoteResponse(
+      message: json['message'],
+      signalId: json['signal_id'],
+      isTrue: json['is_true'],
+      newTrueVotes: json['new_true_votes'],
+      newFalseVotes: json['new_false_votes'],
+      updatedTrustScore: json['updated_trust_score'].toDouble(),
+    );
+  }
+}
+
+/// Vote Summary model
+class VoteSummary {
+  final String signalId;
+  final int trueVotes;
+  final int falseVotes;
+  final int totalVotes;
+  final double trustRatio;
+  final double trustScore;
+
+  VoteSummary({
+    required this.signalId,
+    required this.trueVotes,
+    required this.falseVotes,
+    required this.totalVotes,
+    required this.trustRatio,
+    required this.trustScore,
+  });
+
+  factory VoteSummary.fromJson(Map<String, dynamic> json) {
+    return VoteSummary(
+      signalId: json['signal_id'],
+      trueVotes: json['true_votes'],
+      falseVotes: json['false_votes'],
+      totalVotes: json['total_votes'],
+      trustRatio: json['trust_ratio'].toDouble(),
+      trustScore: json['trust_score'].toDouble(),
+    );
+  }
+}
+
+/// Vote Check Response model
+class VoteCheckResponse {
+  final bool hasVoted;
+  final bool? isTrue;
+
+  VoteCheckResponse({required this.hasVoted, this.isTrue});
+
+  factory VoteCheckResponse.fromJson(Map<String, dynamic> json) {
+    return VoteCheckResponse(
+      hasVoted: json['has_voted'],
+      isTrue: json['is_true'],
+    );
+  }
+}
+
+/// Delete Report Response model
+class DeleteReportResponse {
+  final String message;
+  final String deletedSignalId;
+  final DateTime deletedAt;
+
+  DeleteReportResponse({
+    required this.message,
+    required this.deletedSignalId,
+    required this.deletedAt,
+  });
+
+  factory DeleteReportResponse.fromJson(Map<String, dynamic> json) {
+    return DeleteReportResponse(
+      message: json['message'],
+      deletedSignalId: json['deleted_signal_id'],
+      deletedAt: DateTime.tryParse(json['deleted_at']) ?? DateTime.now(),
     );
   }
 }

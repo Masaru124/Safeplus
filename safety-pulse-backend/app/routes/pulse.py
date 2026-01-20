@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Query, HTTPException
+from fastapi import APIRouter, Query, HTTPException, Depends
 from typing import List
 from app.schemas import PulseTileResponse, PulseResponse
 from app.services.pulse_aggregation import PulseAggregationService
+from app.dependencies import get_current_user, JWTUser
 import redis
 import json
 from datetime import datetime, timedelta
@@ -16,9 +17,13 @@ async def get_safety_pulse(
     lat: float = Query(..., description="Latitude of center point"),
     lng: float = Query(..., description="Longitude of center point"),
     radius: float = Query(10.0, description="Radius in kilometers"),
-    time_window: str = Query("24h", description="Time window (e.g., 1h, 24h, 7d)")
+    time_window: str = Query("24h", description="Time window (e.g., 1h, 24h, 7d)"),
+    current_user: JWTUser = Depends(get_current_user)
 ):
-    """Get safety pulse heatmap data"""
+    """
+    Get safety pulse heatmap data.
+    Requires authentication - only logged-in users can access the map.
+    """
 
     # Validate parameters
     if not -90 <= lat <= 90:
