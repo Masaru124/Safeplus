@@ -351,6 +351,46 @@ class ApiService {
     }
   }
 
+  /// Fetch active pulses from the backend (SINGLE source of truth for map)
+  /// This endpoint returns pulse tiles with intensity, confidence, and dominant_reason
+  Future<PulseListResponse> fetchActivePulses({
+    required double lat,
+    required double lng,
+    double? radius,
+    required String token,
+  }) async {
+    final params = <String, String>{
+      // Optional location-based filtering
+      if (lat != 0) 'lat': lat.toString(),
+      if (lng != 0) 'lng': lng.toString(),
+      if (radius != null) 'radius': radius.toString(),
+    };
+
+    final url = Uri.parse(
+      '$baseUrl/api/v1/pulses/active',
+    ).replace(queryParameters: params);
+
+    final response = await http.get(
+      url,
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return PulseListResponse.fromBackendJson(data);
+    } else {
+      throw ApiException(
+        statusCode: response.statusCode,
+        message:
+            jsonDecode(response.body)['detail'] ??
+            'Failed to fetch active pulses',
+      );
+    }
+  }
+
   /// Parse report item from backend response
   SafetyReport _parseReportItem(Map<String, dynamic> json) {
     // Handle UUID as string or object

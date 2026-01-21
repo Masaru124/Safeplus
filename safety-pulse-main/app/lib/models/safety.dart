@@ -22,6 +22,12 @@ class SafetyReport {
   final bool?
   userVote; // User's vote: true = accurate, false = inaccurate, null = no vote
 
+  // New fields for confidence and trust
+  final double confidenceScore; // Derived confidence (0.0-1.0)
+  final double severityWeight; // Weight based on report type/severity
+  final DateTime? lastActivityAt; // Last vote/edit timestamp
+  final DateTime? expiresAt; // Expiration timestamp
+
   SafetyReport({
     required this.id,
     required this.latitude,
@@ -37,6 +43,10 @@ class SafetyReport {
     this.trueVotes = 0,
     this.falseVotes = 0,
     this.userVote,
+    this.confidenceScore = 0.5,
+    this.severityWeight = 0.5,
+    this.lastActivityAt,
+    this.expiresAt,
   });
 
   /// Total number of votes
@@ -82,6 +92,19 @@ class SafetyReport {
     // Parse datetime as UTC (backend sends timezone-aware UTC timestamps)
     final timestamp = DateTime.parse(createdAt).toUtc();
 
+    // Parse new confidence and activity fields
+    final confidenceScore =
+        (json['confidence_score'] as num?)?.toDouble() ?? 0.5;
+    final severityWeight = (json['severity_weight'] as num?)?.toDouble() ?? 0.5;
+    final lastActivityAtStr = json['last_activity_at'] as String?;
+    final lastActivityAt = lastActivityAtStr != null
+        ? DateTime.parse(lastActivityAtStr).toUtc()
+        : null;
+    final expiresAtStr = json['expires_at'] as String?;
+    final expiresAt = expiresAtStr != null
+        ? DateTime.parse(expiresAtStr).toUtc()
+        : null;
+
     // Calculate opacity based on age using UTC times
     final nowUtc = DateTime.now().toUtc();
     final hoursAgo = nowUtc.difference(timestamp).inHours.toDouble();
@@ -104,6 +127,10 @@ class SafetyReport {
       trueVotes: trueVotes,
       falseVotes: falseVotes,
       userVote: userVote,
+      confidenceScore: confidenceScore,
+      severityWeight: severityWeight,
+      lastActivityAt: lastActivityAt,
+      expiresAt: expiresAt,
     );
   }
 
@@ -177,3 +204,127 @@ const List<Map<String, dynamic>> reportCategories = [
     'level': SafetyLevel.safe,
   },
 ];
+
+/// Pulse model - represents a safety pulse tile from the backend
+/// This is the SINGLE source of truth for map rendering
+class Pulse {
+  final double lat;
+  final double lng;
+  final int radius; // in meters
+  final double intensity; // 0.0-1.0
+  final String confidence; // HIGH, MEDIUM, LOW
+  final String? dominantReason;
+  final DateTime lastUpdated;
+
+  Pulse({
+    required this.lat,
+    required this.lng,
+    required this.radius,
+    required this.intensity,
+    required this.confidence,
+    this.dominantReason,
+    required this.lastUpdated,
+  });
+
+  /// Get safety level based on intensity
+  SafetyLevel get safetyLevel {
+    if (intensity >= 0.7) return SafetyLevel.unsafe;
+    if (intensity >= 0.4) return SafetyLevel.caution;
+    return SafetyLevel.safe;
+  }
+
+  /// Get display color based on intensity
+  int get colorHex {
+    final colors = safetyColors[safetyLevel]!;
+    return colors['main']!;
+  }
+
+  /// Get animation speed based on intensity (stronger pulses animate faster)
+  Duration get animationDuration {
+    // Stronger intensity = faster animation (shorter duration)
+    final baseDuration = 2000; // 2 seconds base
+    final adjustedDuration = (baseDuration * (1 - intensity * 0.5)).round();
+    return Duration(milliseconds: adjustedDuration);
+  }
+
+  /// Get opacity based on intensity and confidence
+  double get displayOpacity {
+    // Base opacity from intensity
+    final baseOpacity = intensity;
+
+    // Boost for high confidence
+    final confidenceBoost = confidence == 'HIGH'
+        ? 0.2
+        : confidence == 'MEDIUM'
+        ? 0.1
+        : 0.0;
+
+    return (baseOpacity + confidenceBoost).clamp(0.3, 1.0);
+  }
+
+  /// Create Pulse from backend JSON response
+  factory Pulse.fromBackendJson(Map<String, dynamic> json) {
+    final lastUpdatedStr =
+        json['last_updated'] as String? ?? DateTime.now().toIso8601String();
+    final lastUpdated =
+        DateTime.tryParse(lastUpdatedStr)?.toUtc() ?? DateTime.now().toUtc();
+
+    return Pulse(
+      lat: (json['lat'] as num?)?.toDouble() ?? 0.0,
+      lng: (json['lng'] as num?)?.toDouble() ?? 0.0,
+      radius: json['radius'] as int? ?? 200,
+      intensity: (json['intensity'] as num?)?.toDouble() ?? 0.0,
+      confidence: json['confidence'] as String? ?? 'MEDIUM',
+      dominantReason: json['dominant_reason'] as String?,
+      lastUpdated: lastUpdated,
+    );
+  }
+
+  /// Get formatted confidence display text
+  String get confidenceDisplay {
+    return 'Community confidence: $confidence';
+  }
+
+  /// Get formatted reason display text
+  String? get reasonDisplay {
+    return dominantReason;
+  }
+
+  /// Check if pulse is recent (within last hour)
+  bool get isRecent {
+    final now = DateTime.now().toUtc();
+    final oneHourAgo = now.subtract(const Duration(hours: 1));
+    return lastUpdated.isAfter(oneHourAgo);
+  }
+
+  /// Check if pulse is expiring soon (within 6 hours)
+  bool get isExpiringSoon {
+    final now = DateTime.now().toUtc();
+    final sixHoursAgo = now.subtract(const Duration(hours: 6));
+    return lastUpdated.isBefore(sixHoursAgo);
+  }
+}
+
+/// Pulse list response from backend
+class PulseListResponse {
+  final List<Pulse> pulses;
+  final int count;
+  final String generatedAt;
+
+  PulseListResponse({
+    required this.pulses,
+    required this.count,
+    required this.generatedAt,
+  });
+
+  factory PulseListResponse.fromBackendJson(Map<String, dynamic> json) {
+    final List<dynamic> pulsesJson = json['pulses'] ?? [];
+
+    return PulseListResponse(
+      pulses: pulsesJson.map((p) => Pulse.fromBackendJson(p)).toList(),
+      count: json['count'] as int? ?? pulsesJson.length,
+      generatedAt:
+          json['generated_at'] as String? ?? DateTime.now().toIso8601String(),
+    );
+  }
+}

@@ -188,7 +188,7 @@ async def get_reports(
 
 @router.post("/reports/{signal_id}/vote", response_model=VoteResponse)
 async def vote_on_report(
-    signal_id: uuid.UUID,
+    signal_id: str,
     vote_request: VoteRequest,
     current_user: JWTUser = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -203,14 +203,31 @@ async def vote_on_report(
     If you want to change your vote, you must first delete your existing vote.
     """
     
-    # Get the signal
-    signal = db.query(SafetySignal).filter(SafetySignal.id == signal_id).first()
+    # Try to parse as UUID first, then fallback to numeric string search
+    signal_uuid = None
+    try:
+        signal_uuid = uuid.UUID(signal_id)
+    except ValueError:
+        # Handle numeric string IDs (e.g., timestamp-based from frontend)
+        pass
+    
+    # Get the signal - try UUID first, then by string ID
+    signal = None
+    if signal_uuid:
+        signal = db.query(SafetySignal).filter(SafetySignal.id == signal_uuid).first()
+    
+    if not signal:
+        # Try searching by string representation of UUID
+        signal = db.query(SafetySignal).filter(
+            SafetySignal.id == signal_id
+        ).first()
+    
     if not signal:
         raise HTTPException(status_code=404, detail="Report not found")
     
     # Check if user already voted - if so, reject the new vote
     existing_vote = db.query(ReportVerification).filter(
-        ReportVerification.signal_id == signal_id,
+        ReportVerification.signal_id == signal.id,
         ReportVerification.user_id == current_user.user_id
     ).first()
     
@@ -224,7 +241,7 @@ async def vote_on_report(
     
     # Create new vote
     verification = ReportVerification(
-        signal_id=signal_id,
+        signal_id=signal.id,
         user_id=current_user.user_id,
         is_true=vote_request.is_true
     )
@@ -232,7 +249,7 @@ async def vote_on_report(
     
     # Update trust score based on the new vote
     updated_trust_score = trust_service.update_signal_trust_from_vote(
-        signal_id=str(signal_id),
+        signal_id=str(signal.id),
         is_true_vote=vote_request.is_true
     )
     
@@ -243,7 +260,7 @@ async def vote_on_report(
     
     return VoteResponse(
         message="Vote recorded successfully",
-        signal_id=signal_id,
+        signal_id=signal.id,
         is_true=vote_request.is_true,
         new_true_votes=signal.true_votes or 0,
         new_false_votes=signal.false_votes or 0,
@@ -252,7 +269,7 @@ async def vote_on_report(
 
 @router.delete("/reports/{signal_id}/vote", response_model=VoteResponse)
 async def remove_vote(
-    signal_id: uuid.UUID,
+    signal_id: str,
     current_user: JWTUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -260,9 +277,18 @@ async def remove_vote(
     Remove your vote from a report.
     """
     
+    # Validate signal_id is a valid UUID
+    try:
+        signal_uuid = uuid.UUID(signal_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid signal ID format: '{signal_id}'. Expected a valid UUID."
+        )
+    
     # Get the vote
     vote = db.query(ReportVerification).filter(
-        ReportVerification.signal_id == signal_id,
+        ReportVerification.signal_id == signal_uuid,
         ReportVerification.user_id == current_user.user_id
     ).first()
     
@@ -270,14 +296,14 @@ async def remove_vote(
         raise HTTPException(status_code=404, detail="Vote not found")
     
     # Get the signal
-    signal = db.query(SafetySignal).filter(SafetySignal.id == signal_id).first()
+    signal = db.query(SafetySignal).filter(SafetySignal.id == signal_uuid).first()
     if not signal:
         raise HTTPException(status_code=404, detail="Report not found")
     
     # Revert the vote and update trust score
     trust_service = TrustScoringService(db)
     updated_trust_score = trust_service.revert_vote_from_signal(
-        signal_id=str(signal_id),
+        signal_id=str(signal_uuid),
         was_true_vote=vote.is_true
     )
     
@@ -290,7 +316,7 @@ async def remove_vote(
     
     return VoteResponse(
         message="Vote removed successfully",
-        signal_id=signal_id,
+        signal_id=signal_uuid,
         is_true=vote.is_true,
         new_true_votes=signal.true_votes or 0,
         new_false_votes=signal.false_votes or 0,
@@ -299,7 +325,7 @@ async def remove_vote(
 
 @router.get("/reports/{signal_id}/votes", response_model=VoteSummary)
 async def get_vote_summary(
-    signal_id: uuid.UUID,
+    signal_id: str,
     current_user: JWTUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -307,17 +333,26 @@ async def get_vote_summary(
     Get the vote summary for a report.
     """
     
+    # Validate signal_id is a valid UUID
+    try:
+        signal_uuid = uuid.UUID(signal_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid signal ID format: '{signal_id}'. Expected a valid UUID."
+        )
+    
     trust_service = TrustScoringService(db)
     
     try:
-        summary = trust_service.get_vote_summary(str(signal_id))
+        summary = trust_service.get_vote_summary(str(signal_uuid))
         return VoteSummary(**summary)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/reports/{signal_id}/vote/check", response_model=VoteCheckResponse)
 async def check_user_vote(
-    signal_id: uuid.UUID,
+    signal_id: str,
     current_user: JWTUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -325,8 +360,17 @@ async def check_user_vote(
     Check if the current user has voted on a report.
     """
     
+    # Validate signal_id is a valid UUID
+    try:
+        signal_uuid = uuid.UUID(signal_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid signal ID format: '{signal_id}'. Expected a valid UUID."
+        )
+    
     vote = db.query(ReportVerification).filter(
-        ReportVerification.signal_id == signal_id,
+        ReportVerification.signal_id == signal_uuid,
         ReportVerification.user_id == current_user.user_id
     ).first()
     

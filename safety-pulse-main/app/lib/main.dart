@@ -445,6 +445,18 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  void _showReportsPanel(BuildContext context, List<SafetyReport> reports) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => ReportsPanel(reports: reports),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
@@ -480,6 +492,11 @@ class _HomePageState extends State<HomePage> {
                 safetyProvider.refreshReports(token: token);
               }
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.list),
+            tooltip: 'View Reports',
+            onPressed: () => _showReportsPanel(context, safetyProvider.reports),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -705,5 +722,378 @@ class _ReportDialogState extends State<ReportDialog> {
         ElevatedButton(onPressed: _submitReport, child: const Text('Submit')),
       ],
     );
+  }
+}
+
+/// Reports Panel - shows list of all reports in a bottom sheet
+class ReportsPanel extends StatelessWidget {
+  final List<SafetyReport> reports;
+
+  const ReportsPanel({super.key, required this.reports});
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableScrollableSheet(
+      initialChildSize: 0.6,
+      minChildSize: 0.3,
+      maxChildSize: 0.9,
+      expand: false,
+      builder: (context, scrollController) {
+        return Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[400],
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Recent Reports',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(
+                    '${reports.length} reports',
+                    style: Theme.of(context).textTheme.bodyMedium,
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            // Reports list
+            Expanded(
+              child: reports.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: const [
+                          Icon(Icons.rate_review, size: 48, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'No reports in this area',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          SizedBox(height: 8),
+                          Text(
+                            'Be the first to report!',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      controller: scrollController,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: reports.length,
+                      itemBuilder: (context, index) {
+                        final report = reports[index];
+                        return _ReportListItem(report: report);
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _ReportListItem extends StatelessWidget {
+  final SafetyReport report;
+
+  const _ReportListItem({required this.report});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = _getLevelColors(report.level);
+
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      child: InkWell(
+        onTap: () {
+          Navigator.of(context).pop();
+          _showReportDetails(context, report);
+        },
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    _getLevelIcon(report.level),
+                    color: Color(colors['main']!),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          report.category,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          _getLevelText(report.level),
+                          style: TextStyle(
+                            color: Color(colors['main']!),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[200],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      report.confidenceScore >= 0.7
+                          ? 'HIGH'
+                          : report.confidenceScore >= 0.4
+                          ? 'MEDIUM'
+                          : 'LOW',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    _getTimeAgo(report.timestamp),
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                  const SizedBox(width: 16),
+                  const Icon(Icons.location_on, size: 14, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${report.latitude.toStringAsFixed(3)}, ${report.longitude.toStringAsFixed(3)}',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+              if (report.reporterUsername != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 14, color: Colors.blue),
+                    const SizedBox(width: 4),
+                    Text(
+                      '@${report.reporterUsername}',
+                      style: const TextStyle(color: Colors.blue, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+              // Trust score info
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.how_to_vote, size: 14, color: Colors.purple),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${report.trueVotes + report.falseVotes} votes (${((report.trustScore ?? 0.5) * 100).toInt()}% positive)',
+                    style: const TextStyle(color: Colors.purple, fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReportDetails(BuildContext context, SafetyReport report) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(report.category),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  _getSeverityIcon(report.level),
+                  const SizedBox(width: 8),
+                  Text(_getSeverityText(report.level)),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  const Icon(Icons.access_time, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(_getTimeAgo(report.timestamp)),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${report.latitude.toStringAsFixed(5)}, ${report.longitude.toStringAsFixed(5)}',
+                  ),
+                ],
+              ),
+              if (report.reporterUsername != null) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.person, size: 16, color: Colors.blue),
+                    const SizedBox(width: 8),
+                    Text('Reported by: ${report.reporterUsername}'),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+              const Divider(),
+              const SizedBox(height: 8),
+              // Trust info
+              Row(
+                children: [
+                  const Icon(Icons.verified_user, size: 16, color: Colors.blue),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Trust Score: ${((report.trustScore ?? 0.5) * 100).toInt()}%',
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  const Icon(Icons.how_to_vote, size: 16, color: Colors.purple),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${report.trueVotes} accurate, ${report.falseVotes} inaccurate',
+                  ),
+                ],
+              ),
+              if (report.description != null &&
+                  report.description!.isNotEmpty) ...[
+                const SizedBox(height: 16),
+                const Divider(),
+                const SizedBox(height: 8),
+                const Text(
+                  'Description:',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(report.description!),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _getTimeAgo(DateTime timestamp) {
+    final now = DateTime.now();
+    final difference = now.difference(timestamp);
+
+    if (difference.inMinutes < 1) return 'Just now';
+    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
+    if (difference.inHours < 24) return '${difference.inHours}h ago';
+    return '${difference.inDays}d ago';
+  }
+
+  IconData _getLevelIcon(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return Icons.check_circle;
+      case SafetyLevel.caution:
+        return Icons.warning;
+      case SafetyLevel.unsafe:
+        return Icons.error;
+    }
+  }
+
+  String _getLevelText(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return 'Safe';
+      case SafetyLevel.caution:
+        return 'Caution';
+      case SafetyLevel.unsafe:
+        return 'Unsafe';
+    }
+  }
+
+  Widget _getSeverityIcon(SafetyLevel level) {
+    Color color;
+    IconData icon;
+    switch (level) {
+      case SafetyLevel.safe:
+        color = Colors.green;
+        icon = Icons.check_circle;
+        break;
+      case SafetyLevel.caution:
+        color = Colors.orange;
+        icon = Icons.warning;
+        break;
+      case SafetyLevel.unsafe:
+        color = Colors.red;
+        icon = Icons.error;
+        break;
+    }
+    return Icon(icon, color: color, size: 20);
+  }
+
+  String _getSeverityText(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return 'Safe';
+      case SafetyLevel.caution:
+        return 'Caution';
+      case SafetyLevel.unsafe:
+        return 'Unsafe';
+    }
+  }
+
+  Map<String, int> _getLevelColors(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return {'main': 0xFF4CAF50, 'light': 0xFFE8F5E9};
+      case SafetyLevel.caution:
+        return {'main': 0xFFFF9800, 'light': 0xFFFFF3E0};
+      case SafetyLevel.unsafe:
+        return {'main': 0xFFF44336, 'light': 0xFFFFEBEE};
+    }
   }
 }

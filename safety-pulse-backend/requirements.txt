@@ -12,3 +12,7 @@ python-multipart
 httpx
 bcrypt
 python-jose[cryptography]
+python-socketio[asyncio]
+websockets
+apscheduler
+scikit-learn
