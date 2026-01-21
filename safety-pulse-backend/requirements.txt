@@ -2,6 +2,7 @@ fastapi
 uvicorn
 sqlalchemy
 psycopg2-binary
+asyncpg
 redis
 pydantic
 alembic
@@ -16,3 +17,4 @@ python-socketio[asyncio]
 websockets
 apscheduler
 scikit-learn
+python-dotenv
