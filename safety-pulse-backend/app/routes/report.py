@@ -1,6 +1,6 @@
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, status
+from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, and_
 from app.database import get_db
 from app.schemas import (
     ReportRequest, ReportResponse, ReportListResponse, ReportItem,
@@ -9,11 +9,15 @@ from app.schemas import (
 from app.models import SignalType, SafetySignal, DeviceActivity, User, ReportVerification
 from app.services.trust_scoring import TrustScoringService
 from app.services.pulse_aggregation import PulseAggregationService
+from app.services.realtime import RealtimeService, connection_manager
 from app.dependencies import get_current_user, JWTUser
 import hashlib
 from datetime import datetime, timedelta, timezone
-import uuid
+from typing import List, Optional
+from uuid import UUID
+from pydantic import BaseModel, field_serializer
 import pygeohash as pgh
+import uuid
 
 router = APIRouter()
 
@@ -186,6 +190,168 @@ async def get_reports(
 
     return ReportListResponse(reports=report_items)
 
+
+class PulseReportResponse(BaseModel):
+    """Response model for a single report in the pulse context"""
+    report_id: UUID
+    created_at: datetime
+    feeling_level: str  # "Calm", "Caution", "Moderate", "Unsafe"
+    reason: str  # "Followed", "Poor lighting", "Suspicious activity", "Other"
+    description: Optional[str] = None  # Max 120 chars
+    has_user_voted: bool
+    is_user_report: bool
+    user_vote: Optional[bool] = None  # True=accurate, False=false
+
+    class Config:
+        from_attributes = True
+    
+    @field_serializer('created_at')
+    @classmethod
+    def serialize_datetime(cls, v: datetime) -> str:
+        return v.isoformat()
+
+
+class PulseReportListResponse(BaseModel):
+    """Response for GET /reports/by-pulse"""
+    reports: List[PulseReportResponse]
+    count: int
+    pulse_lat: float
+    pulse_lng: float
+    generated_at: str
+
+
+@router.get("/reports/by-pulse", response_model=PulseReportListResponse)
+async def get_reports_by_pulse(
+    lat: float = Query(..., description="Pulse center latitude", ge=-90, le=90),
+    lng: float = Query(..., description="Pulse center longitude", ge=-180, le=180),
+    radius: float = Query(500, description="Search radius in meters", ge=50, le=5000),
+    time_window_hours: int = Query(2, description="Only show reports from last N hours", ge=1, le=24),
+    current_user: JWTUser = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get reports for a specific pulse location.
+    
+    This endpoint is used when a user taps on a safety pulse and wants to see
+    the underlying reports. It returns:
+    - Reports within the pulse radius
+    - Limited to recent reports (default 2 hours)
+    - With voting status for the current user
+    
+    NOTE: No personal data is exposed. Reporter usernames are NOT included.
+    """
+    
+    # Calculate time cutoff
+    cutoff_time = datetime.now(timezone.utc) - timedelta(hours=time_window_hours)
+    
+    # Convert radius from meters to approximate degrees (1 degree ≈ 111km)
+    radius_deg = radius / 111000.0
+    
+    # Calculate bounding box
+    min_lat = lat - radius_deg
+    max_lat = lat + radius_deg
+    min_lng = lng - radius_deg
+    max_lng = lng + radius_deg
+    
+    # Get reports within the pulse area and time window
+    reports = db.query(SafetySignal).filter(
+        and_(
+            SafetySignal.latitude.between(min_lat, max_lat),
+            SafetySignal.longitude.between(min_lng, max_lng),
+            SafetySignal.timestamp >= cutoff_time,
+            SafetySignal.is_valid == True
+        )
+    ).order_by(desc(SafetySignal.timestamp)).limit(50).all()
+    
+    # Build response with voting status
+    report_responses = []
+    for report in reports:
+        # Check if current user has voted on this report
+        user_verification = db.query(ReportVerification).filter(
+            ReportVerification.signal_id == report.id,
+            ReportVerification.user_id == current_user.user_id
+        ).first()
+        
+        user_vote = None
+        has_voted = False
+        if user_verification:
+            has_voted = True
+            user_vote = user_verification.is_true
+        
+        # Determine if this is the user's own report
+        is_user_report = report.user_id == current_user.user_id
+        
+        # Map severity to feeling level
+        feeling_level = _get_feeling_level(report.severity)
+        
+        # Format reason from signal type
+        reason = _format_reason(report.signal_type.value)
+        
+        # Get description from context (max 120 chars)
+        description = None
+        if report.context_tags and 'description' in report.context_tags:
+            desc_text = report.context_tags['description']
+            if desc_text and len(desc_text) > 0:
+                description = desc_text[:120] if len(desc_text) > 120 else desc_text
+        
+        report_responses.append(
+            PulseReportResponse(
+                report_id=report.id,
+                created_at=report.timestamp,
+                feeling_level=feeling_level,
+                reason=reason,
+                description=description,
+                has_user_voted=has_voted,
+                is_user_report=is_user_report,
+                user_vote=user_vote
+            )
+        )
+    
+    return PulseReportListResponse(
+        reports=report_responses,
+        count=len(report_responses),
+        pulse_lat=lat,
+        pulse_lng=lng,
+        generated_at=datetime.now(timezone.utc).isoformat()
+    )
+
+
+def _get_feeling_level(severity: int) -> str:
+    """Map severity (1-5) to feeling level"""
+    if severity >= 5:
+        return "Very Unsafe"
+    elif severity >= 4:
+        return "Unsafe"
+    elif severity >= 3:
+        return "Moderate"
+    elif severity >= 2:
+        return "Caution"
+    else:
+        return "Calm"
+
+
+def _format_reason(signal_type: str) -> str:
+    """Format signal type to human-readable reason"""
+    reason_map = {
+        "followed": "Followed",
+        "suspicious_activity": "Suspicious activity",
+        "unsafe_area": "Unsafe area",
+        "harassment": "Harassment",
+        "other": "Other"
+    }
+    return reason_map.get(signal_type, "Other")
+
+
+def _get_confidence_level(trust_score: float) -> str:
+    """Map trust score to confidence level"""
+    if trust_score >= 0.7:
+        return "HIGH"
+    elif trust_score >= 0.4:
+        return "MEDIUM"
+    else:
+        return "LOW"
+
+
 @router.post("/reports/{signal_id}/vote", response_model=VoteResponse)
 async def vote_on_report(
     signal_id: str,
@@ -257,6 +423,45 @@ async def vote_on_report(
     
     # Refresh to get updated counts
     db.refresh(signal)
+    
+    # Emit real-time events
+    from app.services.realtime import connection_manager, EventType
+    from datetime import datetime
+    
+    # VOTE_CAST event - update vote counts in real-time
+    vote_cast_message = {
+        "event_type": "vote_cast",
+        "data": {
+            "signal_id": str(signal.id),
+            "true_votes": signal.true_votes or 0,
+            "false_votes": signal.false_votes or 0,
+            "trust_score": updated_trust_score,
+            "voter_id": str(current_user.user_id),
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await connection_manager.broadcast_to_subscriptions(
+        vote_cast_message,
+        ["global", "report_updates"]
+    )
+    
+    # PULSE_UPDATED event - pulse confidence may have changed
+    pulse_update_message = {
+        "event_type": "pulse_updated",
+        "data": {
+            "signal_id": str(signal.id),
+            "geohash": signal.geohash,
+            "latitude": signal.latitude,
+            "longitude": signal.longitude,
+            "intensity": updated_trust_score,
+            "confidence": _get_confidence_level(updated_trust_score),
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await connection_manager.broadcast_to_subscriptions(
+        pulse_update_message,
+        ["global", "pulse_updates"]
+    )
     
     return VoteResponse(
         message="Vote recorded successfully",

@@ -26,8 +26,16 @@ class SafetyPulseApp extends StatelessWidget {
       child: MaterialApp(
         title: 'Safety Pulse',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Colors.blue,
+            surface: const Color(0xFF1A1A2E),
+          ),
           useMaterial3: true,
+          scaffoldBackgroundColor: const Color(0xFF0F0F1A),
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Color(0xFF1A1A2E),
+            foregroundColor: Colors.white,
+          ),
         ),
         home: const AuthWrapper(),
       ),
@@ -47,7 +55,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Initialize auth state on app start
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AuthProvider>().initialize();
     });
@@ -58,27 +65,45 @@ class _AuthWrapperState extends State<AuthWrapper> {
     final authProvider = context.watch<AuthProvider>();
 
     if (authProvider.isLoading) {
-      // Loading screen while checking auth state
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Loading...'),
-            ],
+      return Scaffold(
+        body: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF1A1A2E), Color(0xFF0F0F1A)],
+            ),
+          ),
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const CircularProgressIndicator(color: Colors.blue),
+                const SizedBox(height: 16),
+                Text(
+                  'Safety Pulse',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Community-powered safety awareness',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+              ],
+            ),
           ),
         ),
       );
     }
 
     if (authProvider.isAuthenticated) {
-      // User is logged in, show the main app
       return const HomePage();
     }
 
-    // User is not logged in, show login screen
     return const LoginScreen();
   }
 }
@@ -139,11 +164,9 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (success) {
       if (mounted) {
-        // Get the token and initialize safety provider
         final token = authProvider.token!;
         context.read<SafetyProvider>().initializeReports(token: token);
 
-        // Navigate to home
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const HomePage()),
         );
@@ -158,130 +181,172 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isLogin ? 'Login' : 'Create Account')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Form(
-          key: _formKey,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 40),
-                const Icon(Icons.security, size: 80, color: Colors.blue),
-                const SizedBox(height: 16),
-                Text(
-                  _isLogin ? 'Welcome Back' : 'Create Account',
-                  style: Theme.of(context).textTheme.headlineMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _isLogin
-                      ? 'Sign in to report and view safety data'
-                      : 'Sign up to start using Safety Pulse',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 32),
-                if (_errorMessage != null)
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(8),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF1A1A2E), Color(0xFF0F0F1A)],
+          ),
+        ),
+        child: SafeArea(
+          child: Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(24),
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.security, size: 60, color: Colors.blue),
+                    const SizedBox(height: 16),
+                    Text(
+                      _isLogin ? 'Welcome Back' : 'Create Account',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    child: Text(
-                      _errorMessage!,
-                      style: TextStyle(color: Colors.red.shade800),
+                    const SizedBox(height: 8),
+                    Text(
+                      _isLogin
+                          ? 'Sign in to report and view safety data'
+                          : 'Join the community',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
-                  ),
-                if (_errorMessage != null) const SizedBox(height: 16),
-                if (!_isLogin)
-                  TextFormField(
-                    controller: _usernameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Username',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.person),
-                    ),
-                    validator: (value) {
-                      if (value == null || value.length < 3) {
-                        return 'Username must be at least 3 characters';
-                      }
-                      return null;
-                    },
-                  ),
-                if (!_isLogin) const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email),
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Email is required';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Password',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.lock),
-                  ),
-                  obscureText: true,
-                  validator: (value) {
-                    if (value == null || value.length < 6) {
-                      return 'Password must be at least 6 characters';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 24),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _submit,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(_isLogin ? 'Login' : 'Create Account'),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () {
-                          setState(() {
-                            _isLogin = !_isLogin;
-                            _errorMessage = null;
-                          });
+                    const SizedBox(height: 32),
+                    if (_errorMessage != null)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.red),
+                        ),
+                        child: Text(
+                          _errorMessage!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    if (_errorMessage != null) const SizedBox(height: 16),
+                    if (!_isLogin)
+                      TextFormField(
+                        controller: _usernameController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: _inputDecoration('Username', Icons.person),
+                        validator: (value) {
+                          if (value == null || value.length < 3) {
+                            return 'Username must be at least 3 characters';
+                          }
+                          return null;
                         },
-                  child: Text(
-                    _isLogin
-                        ? "Don't have an account? Sign up"
-                        : 'Already have an account? Login',
-                  ),
+                      ),
+                    if (!_isLogin) const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _emailController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration('Email', Icons.email),
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Email is required';
+                        }
+                        if (!value.contains('@')) {
+                          return 'Please enter a valid email';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextFormField(
+                      controller: _passwordController,
+                      style: const TextStyle(color: Colors.white),
+                      decoration: _inputDecoration('Password', Icons.lock),
+                      obscureText: true,
+                      validator: (value) {
+                        if (value == null || value.length < 6) {
+                          return 'Password must be at least 6 characters';
+                        }
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : Text(
+                                _isLogin ? 'Login' : 'Create Account',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              setState(() {
+                                _isLogin = !_isLogin;
+                                _errorMessage = null;
+                              });
+                            },
+                      child: Text(
+                        _isLogin
+                            ? "Don't have an account? Sign up"
+                            : 'Already have an account? Login',
+                        style: TextStyle(color: Colors.blue[300]),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, IconData icon) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: TextStyle(color: Colors.white70),
+      prefixIcon: Icon(icon, color: Colors.white70),
+      filled: true,
+      fillColor: Colors.white.withOpacity(0.1),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide(color: Colors.white.withOpacity(0.2)),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Colors.blue),
       ),
     );
   }
@@ -295,8 +360,8 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final bool _locationRequested = false;
   bool _isLoadingLocation = true;
+  bool _showHowItWorks = false;
 
   @override
   void initState() {
@@ -309,12 +374,10 @@ class _HomePageState extends State<HomePage> {
       _isLoadingLocation = true;
     });
 
-    // Get auth token
     final authProvider = context.read<AuthProvider>();
     final token = authProvider.token;
 
     if (token == null) {
-      // Not authenticated, go to login
       if (mounted) {
         Navigator.of(context).pushReplacement(
           MaterialPageRoute(builder: (context) => const LoginScreen()),
@@ -324,7 +387,6 @@ class _HomePageState extends State<HomePage> {
     }
 
     try {
-      // First check if location service is enabled
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
         if (mounted) {
@@ -334,18 +396,15 @@ class _HomePageState extends State<HomePage> {
         return;
       }
 
-      // Check if location permission is already granted
       LocationPermission permission = await Geolocator.checkPermission();
 
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
-        // Request permission
         permission = await Geolocator.requestPermission();
       }
 
       if (permission == LocationPermission.whileInUse ||
           permission == LocationPermission.always) {
-        // Get current location with timeout (10 seconds)
         Position position =
             await Geolocator.getCurrentPosition(
               desiredAccuracy: LocationAccuracy.high,
@@ -353,7 +412,6 @@ class _HomePageState extends State<HomePage> {
             ).timeout(
               const Duration(seconds: 15),
               onTimeout: () {
-                // If timeout, try last known position
                 throw TimeoutException('Location request timed out');
               },
             );
@@ -362,7 +420,6 @@ class _HomePageState extends State<HomePage> {
           setState(() {
             _isLoadingLocation = false;
           });
-          // Set user location and initialize reports for that area
           context.read<SafetyProvider>().setUserLocation(
             MapLocation(
               latitude: position.latitude,
@@ -372,14 +429,12 @@ class _HomePageState extends State<HomePage> {
           );
         }
       } else {
-        // Permission denied, use default location
         if (mounted) {
           _showSnackBar('Location permission denied');
           _initializeWithDefaultLocation(token: token);
         }
       }
     } on TimeoutException {
-      // Timeout, try getting last known position
       if (mounted) {
         try {
           Position? lastPosition = await Geolocator.getLastKnownPosition();
@@ -401,7 +456,6 @@ class _HomePageState extends State<HomePage> {
         _initializeWithDefaultLocation(token: token);
       }
     } catch (e) {
-      // If getting location fails, use default location
       if (mounted) {
         _showSnackBar('Could not get location: ${e.toString()}');
         _initializeWithDefaultLocation(token: token);
@@ -426,7 +480,120 @@ class _HomePageState extends State<HomePage> {
   void _showReportDialog(double lat, double lng) {
     showDialog(
       context: context,
-      builder: (context) => ReportDialog(lat: lat, lng: lng),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.add_location, color: Colors.blue),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Report Safety',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'at ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}',
+                            style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: reportCategories.map((cat) {
+                      final level = cat['level'] as SafetyLevel;
+                      final color = Color(safetyColors[level]!['main']!);
+
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            _showReportDetails(lat, lng, cat);
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: color.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Text(cat['icon'] as String),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    cat['label'] as String,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                  color: Colors.grey[400],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showReportDetails(
+    double lat,
+    double lng,
+    Map<String, dynamic> category,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) =>
+          ReportDetailsDialog(lat: lat, lng: lng, category: category),
     );
   }
 
@@ -445,15 +612,166 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showReportsPanel(BuildContext context, List<SafetyReport> reports) {
-    showModalBottomSheet(
+  void _showHowItWorksDialog() {
+    showDialog(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.help_outline, color: Colors.blue),
+            SizedBox(width: 12),
+            Text('How Safety Pulse Works'),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHowItWorksItem(
+                '1. Report Your Feelings',
+                'Tap anywhere on the map to report how a place felt to you. Reports are completely anonymous.',
+                Icons.rate_review,
+              ),
+              const SizedBox(height: 16),
+              _buildHowItWorksItem(
+                '2. Community Aggregation',
+                'Reports are combined with others nearby to create "Safety Pulses" - showing collective sentiment, not individual incidents.',
+                Icons.people,
+              ),
+              const SizedBox(height: 16),
+              _buildHowItWorksItem(
+                '3. Trust & Confidence',
+                'The system builds trust by showing how many people have reported similar feelings in an area.',
+                Icons.verified_user,
+              ),
+              const SizedBox(height: 16),
+              _buildHowItWorksItem(
+                '4. Time Decay',
+                'Safety Pulses fade over time, reflecting that feelings about a place can change.',
+                Icons.access_time,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: const [
+                    Icon(Icons.info, color: Colors.blue, size: 20),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'This is NOT a crime map. It shows community-reported feelings and perceptions of safety.',
+                        style: TextStyle(fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Got it'),
+          ),
+        ],
       ),
-      builder: (context) => ReportsPanel(reports: reports),
+    );
+  }
+
+  void _showSettingsMenu() {
+    showMenu(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        MediaQuery.of(context).size.width - 48,
+        80,
+        0,
+        0,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'logout',
+          child: Row(
+            children: const [
+              Icon(Icons.logout, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Log out'),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'logout') {
+        _showLogoutConfirmation();
+      }
+    });
+  }
+
+  void _showLogoutConfirmation() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.logout, color: Colors.red),
+            SizedBox(width: 12),
+            Text('Log out'),
+          ],
+        ),
+        content: const Text('Are you sure you want to log out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(context).pop();
+              _logout();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Log out'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHowItWorksItem(String title, String description, IconData icon) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: Colors.blue.withOpacity(0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: Colors.blue, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -462,254 +780,243 @@ class _HomePageState extends State<HomePage> {
     final authProvider = context.watch<AuthProvider>();
     final safetyProvider = context.watch<SafetyProvider>();
 
+    if (safetyProvider.errorMessage != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showSnackBar(safetyProvider.errorMessage!);
+        safetyProvider.clearError();
+      });
+    }
+
+    final token = authProvider.token;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Safety Pulse'),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+        title: Row(
+          children: [
+            const Icon(Icons.security, color: Colors.blue),
+            const SizedBox(width: 8),
+            const Text('Safety Pulse'),
+          ],
+        ),
+        backgroundColor: const Color(0xFF1A1A2E),
+        foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          // Show username if logged in
-          if (authProvider.user != null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Center(
-                child: Text(
-                  '@${authProvider.user!.username}',
-                  style: Theme.of(context).textTheme.bodyMedium,
-                ),
-              ),
-            ),
           IconButton(
-            icon: const Icon(Icons.my_location),
-            tooltip: 'Get My Location',
-            onPressed: () => _requestLocationAndInitialize(),
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            tooltip: 'Refresh Data',
-            onPressed: () {
-              final token = authProvider.token;
-              if (token != null) {
-                safetyProvider.refreshReports(token: token);
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.list),
-            tooltip: 'View Reports',
-            onPressed: () => _showReportsPanel(context, safetyProvider.reports),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Logout',
-            onPressed: _logout,
+            onPressed: _showSettingsMenu,
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
           ),
         ],
       ),
-      body: Consumer<SafetyProvider>(
-        builder: (context, provider, child) {
-          // Show error message if any
-          if (provider.errorMessage != null) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _showSnackBar(provider.errorMessage!);
-              provider.clearError();
-            });
-          }
+      body: Stack(
+        children: [
+          SafetyMap(
+            reports: safetyProvider.reports,
+            onMapTap: _onMapTap,
+            center: safetyProvider.userLocation != null
+                ? LatLng(
+                    safetyProvider.userLocation!.latitude,
+                    safetyProvider.userLocation!.longitude,
+                  )
+                : null,
+          ),
 
-          // Get token for API calls
-          final token = authProvider.token;
-
-          return Stack(
-            children: [
-              SafetyMap(
-                reports: provider.reports,
-                onMapTap: _onMapTap,
-                center: provider.userLocation != null
-                    ? LatLng(
-                        provider.userLocation!.latitude,
-                        provider.userLocation!.longitude,
-                      )
-                    : null,
-              ),
-              // Loading indicator for location/data fetching
-              if (provider.isLoading || _isLoadingLocation)
-                Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
+          // Loading overlay
+          if (safetyProvider.isLoading || _isLoadingLocation)
+            Positioned.fill(
+              child: Container(
+                color: Colors.black54,
+                child: Center(
                   child: Container(
-                    padding: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: Theme.of(context).colorScheme.surface,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.1),
-                          blurRadius: 8,
-                        ),
-                      ],
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: Row(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        const SizedBox(width: 12),
+                        const CircularProgressIndicator(),
+                        const SizedBox(height: 16),
                         Text(
                           _isLoadingLocation
                               ? 'Getting your location...'
                               : 'Loading safety data...',
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          style: const TextStyle(fontSize: 14),
                         ),
                       ],
                     ),
                   ),
                 ),
-              // Debug location indicator
-              Positioned(
-                bottom: 16,
-                left: 16,
-                right: 16,
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.surface.withOpacity(0.9),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Current Location:',
-                        style: Theme.of(context).textTheme.labelSmall,
-                      ),
-                      Text(
-                        provider.userLocation != null
-                            ? '${provider.userLocation!.latitude.toStringAsFixed(6)}, ${provider.userLocation!.longitude.toStringAsFixed(6)}'
-                            : 'Getting location...',
-                        style: Theme.of(context).textTheme.bodyMedium,
-                      ),
-                      if (provider.reports.isEmpty &&
-                          !provider.isLoading &&
-                          !_isLoadingLocation)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Text(
-                            'No reports in this area. Be the first to report!',
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  color: Theme.of(
-                                    context,
-                                  ).colorScheme.onSurfaceVariant,
-                                ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
               ),
-            ],
-          );
-        },
+            ),
+        ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // Use current location if available, otherwise default
-          final provider = context.read<SafetyProvider>();
-          final lat = provider.userLocation?.latitude ?? 40.7484;
-          final lng = provider.userLocation?.longitude ?? -73.9857;
-          _showReportDialog(lat, lng);
-        },
-        tooltip: 'Add Safety Report',
-        child: const Icon(Icons.add),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          // How it works button
+          FloatingActionButton.small(
+            onPressed: _showHowItWorksDialog,
+            backgroundColor: Colors.white.withOpacity(0.1),
+            foregroundColor: Colors.white,
+            child: const Icon(Icons.help_outline),
+          ),
+          const SizedBox(height: 8),
+          // My location button
+          FloatingActionButton.small(
+            onPressed: () => _requestLocationAndInitialize(),
+            backgroundColor: Colors.white.withOpacity(0.1),
+            foregroundColor: Colors.white,
+            child: const Icon(Icons.my_location),
+          ),
+          const SizedBox(height: 8),
+          // Refresh button
+          FloatingActionButton.small(
+            onPressed: () {
+              if (token != null) {
+                safetyProvider.refreshReports(token: token);
+              }
+            },
+            backgroundColor: Colors.white.withOpacity(0.1),
+            foregroundColor: Colors.white,
+            child: const Icon(Icons.refresh),
+          ),
+          const SizedBox(height: 8),
+          // Main report button
+          FloatingActionButton.extended(
+            onPressed: () {
+              final provider = context.read<SafetyProvider>();
+              final lat = provider.userLocation?.latitude ?? 40.7484;
+              final lng = provider.userLocation?.longitude ?? -73.9857;
+              _onMapTap(lat, lng);
+            },
+            icon: const Icon(Icons.add),
+            label: const Text('Report'),
+            backgroundColor: Colors.blue,
+            foregroundColor: Colors.white,
+          ),
+        ],
       ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 }
 
-class ReportDialog extends StatefulWidget {
+/// Report details dialog with form
+class ReportDetailsDialog extends StatefulWidget {
   final double lat;
   final double lng;
+  final Map<String, dynamic> category;
 
-  const ReportDialog({super.key, required this.lat, required this.lng});
+  const ReportDetailsDialog({
+    super.key,
+    required this.lat,
+    required this.lng,
+    required this.category,
+  });
 
   @override
-  State<ReportDialog> createState() => _ReportDialogState();
+  State<ReportDetailsDialog> createState() => _ReportDetailsDialogState();
 }
 
-class _ReportDialogState extends State<ReportDialog> {
-  SafetyLevel _selectedLevel = SafetyLevel.safe;
-  String _selectedCategory = 'Felt unsafe here';
+class _ReportDetailsDialogState extends State<ReportDetailsDialog> {
+  int _severity = 3;
   final TextEditingController _descriptionController = TextEditingController();
 
-  void _submitReport() {
-    final report = SafetyReport(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      latitude: widget.lat,
-      longitude: widget.lng,
-      level: _selectedLevel,
-      category: _selectedCategory,
-      description: _descriptionController.text.isEmpty
-          ? null
-          : _descriptionController.text,
-      timestamp: DateTime.now(),
-      opacity: 1.0,
-    );
-
-    // Get auth token
-    final authProvider = context.read<AuthProvider>();
-    final token = authProvider.token;
-
-    if (token != null) {
-      context.read<SafetyProvider>().addReport(report, token: token);
-    }
-
-    Navigator.of(context).pop();
+  @override
+  void dispose() {
+    _descriptionController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final level = widget.category['level'] as SafetyLevel;
+    final color = Color(safetyColors[level]!['main']!);
+
     return AlertDialog(
-      title: const Text('Add Safety Report'),
+      title: Row(
+        children: [
+          Text(widget.category['icon'] as String),
+          const SizedBox(width: 12),
+          Expanded(child: Text(widget.category['label'] as String)),
+        ],
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            DropdownButtonFormField<SafetyLevel>(
-              initialValue: _selectedLevel,
-              decoration: const InputDecoration(labelText: 'Safety Level'),
-              items: SafetyLevel.values.map((level) {
-                return DropdownMenuItem(
-                  value: level,
-                  child: Text(level.name.toUpperCase()),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedLevel = value!),
+            Text(
+              'How intense was this feeling?',
+              style: TextStyle(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _selectedCategory,
-              decoration: const InputDecoration(labelText: 'Category'),
-              items: reportCategories.map((category) {
-                return DropdownMenuItem(
-                  value: category['label'] as String,
-                  child: Text(category['label'] as String),
-                );
-              }).toList(),
-              onChanged: (value) => setState(() => _selectedCategory = value!),
+            Center(
+              child: Text(
+                _getSeverityLabel(_severity),
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+            ),
+            Slider(
+              value: _severity.toDouble(),
+              min: 1,
+              max: 5,
+              divisions: 4,
+              activeColor: color,
+              onChanged: (value) {
+                setState(() {
+                  _severity = value.toInt();
+                });
+              },
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: const [
+                Text('Mild', style: TextStyle(fontSize: 12)),
+                Text('Strong', style: TextStyle(fontSize: 12)),
+              ],
             ),
             const SizedBox(height: 16),
+            Text(
+              'Additional details (optional)',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 8),
             TextField(
               controller: _descriptionController,
+              maxLines: 3,
+              maxLength: 200,
               decoration: const InputDecoration(
-                labelText: 'Description (optional)',
+                hintText: 'Brief description...',
                 border: OutlineInputBorder(),
               ),
-              maxLines: 3,
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: const [
+                  Icon(Icons.lock, size: 16, color: Colors.blue),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your report is completely anonymous',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ),
@@ -719,381 +1026,71 @@ class _ReportDialogState extends State<ReportDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancel'),
         ),
-        ElevatedButton(onPressed: _submitReport, child: const Text('Submit')),
+        ElevatedButton(
+          onPressed: _submitReport,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: color,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Submit'),
+        ),
       ],
     );
   }
-}
 
-/// Reports Panel - shows list of all reports in a bottom sheet
-class ReportsPanel extends StatelessWidget {
-  final List<SafetyReport> reports;
+  String _getSeverityLabel(int severity) {
+    switch (severity) {
+      case 1:
+        return 'Mild';
+      case 2:
+        return 'Low';
+      case 3:
+        return 'Moderate';
+      case 4:
+        return 'High';
+      case 5:
+        return 'Strong';
+      default:
+        return '';
+    }
+  }
 
-  const ReportsPanel({super.key, required this.reports});
+  void _submitReport() {
+    final authProvider = context.read<AuthProvider>();
+    final token = authProvider.token;
 
-  @override
-  Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.6,
-      minChildSize: 0.3,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (context, scrollController) {
-        return Column(
-          children: [
-            // Handle bar
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: Colors.grey[400],
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            // Header
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Recent Reports',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  Text(
-                    '${reports.length} reports',
-                    style: Theme.of(context).textTheme.bodyMedium,
-                  ),
-                ],
-              ),
-            ),
-            const Divider(),
-            // Reports list
-            Expanded(
-              child: reports.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.rate_review, size: 48, color: Colors.grey),
-                          SizedBox(height: 16),
-                          Text(
-                            'No reports in this area',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            'Be the first to report!',
-                            style: TextStyle(color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: reports.length,
-                      itemBuilder: (context, index) {
-                        final report = reports[index];
-                        return _ReportListItem(report: report);
-                      },
-                    ),
-            ),
+    if (token == null) return;
+
+    final level = widget.category['level'] as SafetyLevel;
+
+    final report = SafetyReport(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      latitude: widget.lat,
+      longitude: widget.lng,
+      level: level,
+      category: widget.category['label'] as String,
+      description: _descriptionController.text.isEmpty
+          ? null
+          : _descriptionController.text,
+      timestamp: DateTime.now(),
+      opacity: 1.0,
+    );
+
+    context.read<SafetyProvider>().addReport(report, token: token);
+
+    Navigator.of(context).pop();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Colors.white),
+            SizedBox(width: 12),
+            Text('Thank you for your report!'),
           ],
-        );
-      },
-    );
-  }
-}
-
-class _ReportListItem extends StatelessWidget {
-  final SafetyReport report;
-
-  const _ReportListItem({required this.report});
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = _getLevelColors(report.level);
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: InkWell(
-        onTap: () {
-          Navigator.of(context).pop();
-          _showReportDetails(context, report);
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(
-                    _getLevelIcon(report.level),
-                    color: Color(colors['main']!),
-                    size: 24,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          report.category,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(
-                          _getLevelText(report.level),
-                          style: TextStyle(
-                            color: Color(colors['main']!),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[200],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      report.confidenceScore >= 0.7
-                          ? 'HIGH'
-                          : report.confidenceScore >= 0.4
-                          ? 'MEDIUM'
-                          : 'LOW',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    _getTimeAgo(report.timestamp),
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  const SizedBox(width: 16),
-                  const Icon(Icons.location_on, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${report.latitude.toStringAsFixed(3)}, ${report.longitude.toStringAsFixed(3)}',
-                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-              if (report.reporterUsername != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.person, size: 14, color: Colors.blue),
-                    const SizedBox(width: 4),
-                    Text(
-                      '@${report.reporterUsername}',
-                      style: const TextStyle(color: Colors.blue, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ],
-              // Trust score info
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.how_to_vote, size: 14, color: Colors.purple),
-                  const SizedBox(width: 4),
-                  Text(
-                    '${report.trueVotes + report.falseVotes} votes (${((report.trustScore ?? 0.5) * 100).toInt()}% positive)',
-                    style: const TextStyle(color: Colors.purple, fontSize: 12),
-                  ),
-                ],
-              ),
-            ],
-          ),
         ),
+        backgroundColor: Colors.green,
       ),
     );
-  }
-
-  void _showReportDetails(BuildContext context, SafetyReport report) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(report.category),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _getSeverityIcon(report.level),
-                  const SizedBox(width: 8),
-                  Text(_getSeverityText(report.level)),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  const Icon(Icons.access_time, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(_getTimeAgo(report.timestamp)),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${report.latitude.toStringAsFixed(5)}, ${report.longitude.toStringAsFixed(5)}',
-                  ),
-                ],
-              ),
-              if (report.reporterUsername != null) ...[
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.person, size: 16, color: Colors.blue),
-                    const SizedBox(width: 8),
-                    Text('Reported by: ${report.reporterUsername}'),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 12),
-              const Divider(),
-              const SizedBox(height: 8),
-              // Trust info
-              Row(
-                children: [
-                  const Icon(Icons.verified_user, size: 16, color: Colors.blue),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Trust Score: ${((report.trustScore ?? 0.5) * 100).toInt()}%',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  const Icon(Icons.how_to_vote, size: 16, color: Colors.purple),
-                  const SizedBox(width: 8),
-                  Text(
-                    '${report.trueVotes} accurate, ${report.falseVotes} inaccurate',
-                  ),
-                ],
-              ),
-              if (report.description != null &&
-                  report.description!.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                const Divider(),
-                const SizedBox(height: 8),
-                const Text(
-                  'Description:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(report.description!),
-              ],
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _getTimeAgo(DateTime timestamp) {
-    final now = DateTime.now();
-    final difference = now.difference(timestamp);
-
-    if (difference.inMinutes < 1) return 'Just now';
-    if (difference.inMinutes < 60) return '${difference.inMinutes}m ago';
-    if (difference.inHours < 24) return '${difference.inHours}h ago';
-    return '${difference.inDays}d ago';
-  }
-
-  IconData _getLevelIcon(SafetyLevel level) {
-    switch (level) {
-      case SafetyLevel.safe:
-        return Icons.check_circle;
-      case SafetyLevel.caution:
-        return Icons.warning;
-      case SafetyLevel.unsafe:
-        return Icons.error;
-    }
-  }
-
-  String _getLevelText(SafetyLevel level) {
-    switch (level) {
-      case SafetyLevel.safe:
-        return 'Safe';
-      case SafetyLevel.caution:
-        return 'Caution';
-      case SafetyLevel.unsafe:
-        return 'Unsafe';
-    }
-  }
-
-  Widget _getSeverityIcon(SafetyLevel level) {
-    Color color;
-    IconData icon;
-    switch (level) {
-      case SafetyLevel.safe:
-        color = Colors.green;
-        icon = Icons.check_circle;
-        break;
-      case SafetyLevel.caution:
-        color = Colors.orange;
-        icon = Icons.warning;
-        break;
-      case SafetyLevel.unsafe:
-        color = Colors.red;
-        icon = Icons.error;
-        break;
-    }
-    return Icon(icon, color: color, size: 20);
-  }
-
-  String _getSeverityText(SafetyLevel level) {
-    switch (level) {
-      case SafetyLevel.safe:
-        return 'Safe';
-      case SafetyLevel.caution:
-        return 'Caution';
-      case SafetyLevel.unsafe:
-        return 'Unsafe';
-    }
-  }
-
-  Map<String, int> _getLevelColors(SafetyLevel level) {
-    switch (level) {
-      case SafetyLevel.safe:
-        return {'main': 0xFF4CAF50, 'light': 0xFFE8F5E9};
-      case SafetyLevel.caution:
-        return {'main': 0xFFFF9800, 'light': 0xFFFFF3E0};
-      case SafetyLevel.unsafe:
-        return {'main': 0xFFF44336, 'light': 0xFFFFEBEE};
-    }
   }
 }

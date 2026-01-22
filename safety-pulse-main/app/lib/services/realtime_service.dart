@@ -26,6 +26,8 @@ class RealtimeService {
       StreamController<Map<String, dynamic>>.broadcast();
   final _locationAlertController =
       StreamController<Map<String, dynamic>>.broadcast();
+  final _voteCastController =
+      StreamController<Map<String, dynamic>>.broadcast();
 
   // Connection state
   bool _isConnected = false;
@@ -51,6 +53,9 @@ class RealtimeService {
   /// Stream of location alerts
   Stream<Map<String, dynamic>> get locationAlerts =>
       _locationAlertController.stream;
+
+  /// Stream of vote cast events
+  Stream<Map<String, dynamic>> get voteCasts => _voteCastController.stream;
 
   /// Check if connected
   bool get isConnected => _isConnected;
@@ -181,6 +186,14 @@ class RealtimeService {
           final alertData = data['data'] as Map<String, dynamic>;
           _locationAlertController.add(alertData);
           break;
+        case 'vote_cast':
+          final voteData = data['data'] as Map<String, dynamic>;
+          _voteCastController.add(voteData);
+          break;
+        case 'pulse_updated':
+          final pulseData = data['data'] as Map<String, dynamic>;
+          _pulseUpdateController.add(pulseData);
+          break;
         case 'pong':
           // Handle pong
           break;
@@ -199,6 +212,7 @@ class RealtimeService {
     _pulseUpdateController.close();
     _spikeAlertController.close();
     _locationAlertController.close();
+    _voteCastController.close();
   }
 }
 

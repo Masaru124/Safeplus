@@ -44,6 +44,7 @@ class SafetyProvider with ChangeNotifier {
   dynamic _pulseUpdateSubscription;
   dynamic _spikeAlertSubscription;
   dynamic _locationAlertSubscription;
+  dynamic _voteCastSubscription;
 
   final ApiService _apiService = ApiService();
 
@@ -83,11 +84,7 @@ class SafetyProvider with ChangeNotifier {
 
   /// Get visible pulses filtered by intensity threshold
   List<Pulse> get visiblePulses {
-    if (_currentZoom < kZoomShowPulses) {
-      // At low zoom, show only high-intensity pulses
-      return _pulses.where((p) => p.intensity >= 0.5).toList();
-    }
-    // At medium/high zoom, show all pulses above threshold
+    // Show all pulses above minimum threshold
     return _pulses.where((p) => p.intensity >= kMinPulseIntensity).toList();
   }
 
@@ -666,6 +663,7 @@ class SafetyProvider with ChangeNotifier {
     _pulseUpdateSubscription?.cancel();
     _spikeAlertSubscription?.cancel();
     _locationAlertSubscription?.cancel();
+    _voteCastSubscription?.cancel();
 
     _realtimeService?.dispose();
     _realtimeService = null;

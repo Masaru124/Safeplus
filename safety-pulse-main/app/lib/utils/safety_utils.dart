@@ -77,6 +77,9 @@ Map<String, dynamic> calculateAreaSafetyScore(List<SafetyReport> reports) {
       case SafetyLevel.caution:
         safetySum += 50 * weight;
         break;
+      case SafetyLevel.moderate:
+        safetySum += 25 * weight;
+        break;
       case SafetyLevel.unsafe:
         safetySum += 0 * weight;
         break;
@@ -86,8 +89,10 @@ Map<String, dynamic> calculateAreaSafetyScore(List<SafetyReport> reports) {
   final score = (safetySum / totalWeight).round();
   final level = score >= 70
       ? SafetyLevel.safe
-      : score >= 40
+      : score >= 50
       ? SafetyLevel.caution
+      : score >= 25
+      ? SafetyLevel.moderate
       : SafetyLevel.unsafe;
 
   return {'score': score, 'level': level};

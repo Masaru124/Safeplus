@@ -1,6 +1,7 @@
 import 'dart:math';
+import 'package:flutter/material.dart';
 
-enum SafetyLevel { safe, caution, unsafe }
+enum SafetyLevel { safe, caution, moderate, unsafe }
 
 class SafetyReport {
   final String id;
@@ -12,21 +13,19 @@ class SafetyReport {
   final DateTime timestamp;
   final double opacity;
   final double? trustScore;
-  final String? reporterUsername; // Added field for reporter info
-  final String?
-  userId; // ID of the user who created this report (for ownership check)
+  final String? reporterUsername;
+  final String? userId;
 
   // Vote-related fields for trust score calculation
   final int trueVotes;
   final int falseVotes;
-  final bool?
-  userVote; // User's vote: true = accurate, false = inaccurate, null = no vote
+  final bool? userVote;
 
   // New fields for confidence and trust
-  final double confidenceScore; // Derived confidence (0.0-1.0)
-  final double severityWeight; // Weight based on report type/severity
-  final DateTime? lastActivityAt; // Last vote/edit timestamp
-  final DateTime? expiresAt; // Expiration timestamp
+  final double confidenceScore;
+  final double severityWeight;
+  final DateTime? lastActivityAt;
+  final DateTime? expiresAt;
 
   SafetyReport({
     required this.id,
@@ -49,37 +48,24 @@ class SafetyReport {
     this.expiresAt,
   });
 
-  /// Total number of votes
   int get totalVotes => trueVotes + falseVotes;
-
-  /// Trust ratio (true votes / total votes)
   double get trustRatio => totalVotes > 0 ? trueVotes / totalVotes : 0.5;
-
-  /// Whether the current user has voted on this report
   bool get hasUserVoted => userVote != null;
-
-  /// Whether the current user owns this report
   bool isOwnedBy(String? currentUserId) {
     return currentUserId != null && userId != null && currentUserId == userId;
   }
 
-  /// Create SafetyReport from backend JSON response
   factory SafetyReport.fromBackendJson(Map<String, dynamic> json) {
     final signalType = json['signal_type'] as String? ?? 'other';
     final severity = json['severity'] as int? ?? 3;
     final createdAt =
         json['created_at'] as String? ?? DateTime.now().toIso8601String();
     final trustScore = (json['trust_score'] as num?)?.toDouble() ?? 0.5;
-
-    // Vote fields
     final trueVotes = json['true_votes'] as int? ?? 0;
     final falseVotes = json['false_votes'] as int? ?? 0;
     final userVote = json['user_vote'] as bool?;
-
-    // User ID for ownership check
     final userId = json['user_id'] as String?;
 
-    // Determine safety level from severity
     SafetyLevel level;
     if (severity >= 4) {
       level = SafetyLevel.unsafe;
@@ -89,10 +75,7 @@ class SafetyReport {
       level = SafetyLevel.safe;
     }
 
-    // Parse datetime as UTC (backend sends timezone-aware UTC timestamps)
     final timestamp = DateTime.parse(createdAt).toUtc();
-
-    // Parse new confidence and activity fields
     final confidenceScore =
         (json['confidence_score'] as num?)?.toDouble() ?? 0.5;
     final severityWeight = (json['severity_weight'] as num?)?.toDouble() ?? 0.5;
@@ -105,7 +88,6 @@ class SafetyReport {
         ? DateTime.parse(expiresAtStr).toUtc()
         : null;
 
-    // Calculate opacity based on age using UTC times
     final nowUtc = DateTime.now().toUtc();
     final hoursAgo = nowUtc.difference(timestamp).inHours.toDouble();
     final opacity = max(0.3, 1 - (hoursAgo / 24));
@@ -160,9 +142,147 @@ class MapLocation {
   });
 }
 
+/// Soft gradient safety colors - calm and trust-building
+class SafetyColors {
+  // Core colors with soft, emotional tones
+  static const Color safe = Color(0xFF22C55E); // Calm green
+  static const Color caution = Color(0xFFEAB308); // Warm yellow
+  static const Color moderate = Color(0xFFF97316); // Soft orange
+  static const Color unsafe = Color(0xFFEF4444); // Alert red
+
+  // Transparent versions for map overlays
+  static const Color safeTransparent = Color(0x6622C55E);
+  static const Color cautionTransparent = Color(0x66EAB308);
+  static const Color moderateTransparent = Color(0x66F97316);
+  static const Color unsafeTransparent = Color(0x66EF4444);
+
+  /// Get color for a given safety level
+  static Color forLevel(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return safe;
+      case SafetyLevel.caution:
+        return caution;
+      case SafetyLevel.moderate:
+        return moderate;
+      case SafetyLevel.unsafe:
+        return unsafe;
+    }
+  }
+
+  /// Get transparent color for a given safety level
+  static Color transparentForLevel(SafetyLevel level) {
+    switch (level) {
+      case SafetyLevel.safe:
+        return safeTransparent;
+      case SafetyLevel.caution:
+        return cautionTransparent;
+      case SafetyLevel.moderate:
+        return moderateTransparent;
+      case SafetyLevel.unsafe:
+        return unsafeTransparent;
+    }
+  }
+
+  /// Get gradient colors from safe to unsafe
+  static List<Color> get gradientColors => [safe, caution, moderate, unsafe];
+
+  /// Get color based on intensity (0.0 - 1.0)
+  static Color forIntensity(double intensity) {
+    assert(intensity >= 0.0 && intensity <= 1.0);
+    if (intensity < 0.33) return safe;
+    if (intensity < 0.66) return caution;
+    return intensity < 0.85 ? moderate : unsafe;
+  }
+
+  /// Get transparent color based on intensity
+  static Color transparentForIntensity(
+    double intensity, {
+    double baseOpacity = 0.5,
+  }) {
+    final color = forIntensity(intensity);
+    return color.withOpacity(baseOpacity * intensity);
+  }
+}
+
+/// Confidence level labels
+class ConfidenceLabels {
+  static const String high = 'HIGH';
+  static const String medium = 'MEDIUM';
+  static const String low = 'LOW';
+
+  /// Get label for confidence score
+  static String forScore(double score) {
+    if (score >= 0.7) return high;
+    if (score >= 0.4) return medium;
+    return low;
+  }
+
+  /// Get color for confidence level
+  static Color colorForLevel(String level) {
+    switch (level) {
+      case high:
+        return Colors.green;
+      case medium:
+        return Colors.orange;
+      case low:
+        return Colors.grey;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  /// Get display text for confidence
+  static String displayText(String level) {
+    switch (level) {
+      case high:
+        return 'Community confidence: High';
+      case medium:
+        return 'Community confidence: Medium';
+      case low:
+        return 'Building community confidence';
+      default:
+        return 'Community confidence: Unknown';
+    }
+  }
+}
+
+/// Area safety status labels
+class SafetyStatus {
+  static const String calm = 'Calm';
+  static const String moderate = 'Moderate';
+  static const String cautious = 'Cautious';
+  static const String unsafe = 'Unsafe';
+
+  /// Get status label for intensity
+  static String forIntensity(double intensity) {
+    if (intensity < 0.25) return calm;
+    if (intensity < 0.5) return moderate;
+    if (intensity < 0.75) return cautious;
+    return unsafe;
+  }
+
+  /// Get color for safety status
+  static Color colorForStatus(String status) {
+    switch (status) {
+      case calm:
+        return SafetyColors.safe;
+      case moderate:
+        return SafetyColors.caution;
+      case cautious:
+        return SafetyColors.moderate;
+      case unsafe:
+        return SafetyColors.unsafe;
+      default:
+        return Colors.grey;
+    }
+  }
+}
+
 const Map<SafetyLevel, Map<String, int>> safetyColors = {
   SafetyLevel.safe: {'main': 0xFF22C55E, 'glow': 0x6622C55E},
-  SafetyLevel.caution: {'main': 0xFFF59E0B, 'glow': 0x66F59E0B},
+  SafetyLevel.caution: {'main': 0xFFEAB308, 'glow': 0x66EAB308},
+  SafetyLevel.moderate: {'main': 0xFFF97316, 'glow': 0x66F97316},
   SafetyLevel.unsafe: {'main': 0xFFEF4444, 'glow': 0x66EF4444},
 };
 

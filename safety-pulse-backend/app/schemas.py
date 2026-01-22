@@ -75,6 +75,12 @@ class ReportItem(BaseModel):
     confidence_score: float = 0.5
     last_activity_at: Optional[datetime] = None
     expires_at: Optional[datetime] = None
+    
+    # Status field for report lifecycle
+    status: str = "pending"
+    is_user_report: bool = False
+    can_vote: bool = True
+    can_delete: bool = False
 
     class Config:
         from_attributes = True

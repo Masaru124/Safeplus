@@ -1,9 +1,10 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, DateTime, Enum, JSON, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import enum
 import uuid
+from datetime import datetime
 
 from app.database import Base
 
@@ -18,6 +19,24 @@ class ConfidenceLevel(enum.Enum):
     low = "low"
     medium = "medium"
     high = "high"
+
+class ReportStatus(enum.Enum):
+    """
+    Report lifecycle status.
+    
+    Status transitions:
+    - pending -> verified (when confidence > VERIFY_THRESHOLD)
+    - pending -> disputed (when downvotes > DISPUTE_THRESHOLD)
+    - pending -> expired (after expiration time)
+    - verified -> expired (after expiration time)
+    - disputed -> expired (after expiration time)
+    - Any status -> deleted (soft delete by owner or admin)
+    """
+    pending = "pending"
+    verified = "verified"
+    disputed = "disputed"
+    expired = "expired"
+    deleted = "deleted"
 
 class User(Base):
     __tablename__ = "users"
@@ -55,7 +74,11 @@ class SafetySignal(Base):
     false_votes = Column(Integer, default=0)
     verifications = relationship("ReportVerification", back_populates="signal", lazy="dynamic")
     
-    # New fields for enhanced tracking
+    # ============ Status Lifecycle Fields ============
+    # status: Report lifecycle status (pending/verified/disputed/expired/deleted)
+    status = Column(Enum(ReportStatus), nullable=False, default=ReportStatus.pending)
+    
+    # ============ Enhanced Tracking Fields ============
     # severity_weight: Derived weight based on report type and severity
     severity_weight = Column(Float, nullable=False, default=0.5)
     
@@ -67,6 +90,54 @@ class SafetySignal(Base):
     
     # expires_at: When this signal should expire (24h from creation by default)
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # ============ Abuse & Integrity Fields ============
+    # abuse_flags: Internal flags for tracking abusive behavior
+    abuse_flags = Column(JSON, nullable=True)
+    
+    # deleted_by_owner: True if deleted by the report owner (vs auto-removed)
+    deleted_by_owner = Column(Boolean, default=False)
+    
+    # delete_reason: Reason provided for deletion (if any)
+    delete_reason = Column(Text, nullable=True)
+    
+    # delete_cooldown_expires_at: When user can delete another report
+    delete_cooldown_expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # vote_window_expires_at: When voting window closes for this report
+    vote_window_expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # verified_at: When report was verified
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # disputed_at: When report was disputed
+    disputed_at = Column(DateTime(timezone=True), nullable=True)
+    
+    # Helper methods for status transitions
+    def can_accept_votes(self) -> bool:
+        """Check if this report can still accept votes."""
+        if self.status in [ReportStatus.deleted, ReportStatus.expired]:
+            return False
+        if self.vote_window_expires_at and datetime.utcnow() > self.vote_window_expires_at:
+            return False
+        return True
+    
+    def can_be_deleted_by(self, user_id: UUID) -> bool:
+        """Check if this report can be deleted by the given user."""
+        # Only owner can delete
+        if self.user_id != user_id:
+            return False
+        # Cannot delete verified reports with high confidence
+        if self.status == ReportStatus.verified and self.confidence_score >= 0.7:
+            return False
+        # Check delete cooldown
+        if self.delete_cooldown_expires_at and datetime.utcnow() < self.delete_cooldown_expires_at:
+            return False
+        return True
+    
+    def is_owned_by(self, user_id: UUID) -> bool:
+        """Check if the report is owned by the given user."""
+        return self.user_id == user_id
 
 class ReportVerification(Base):
     __tablename__ = "report_verifications"
