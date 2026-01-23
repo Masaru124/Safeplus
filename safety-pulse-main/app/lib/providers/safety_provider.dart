@@ -6,15 +6,15 @@ import '../services/realtime_service.dart';
 
 /// Zoom level thresholds for smart display
 const double kZoomShowPulses = 11.0; // Show pulse clusters at this zoom
-const double kZoomShowIndividual = 14.0; // Show individual reports at deep zoom
+const double kZoomShowIndividual = 13.0; // Show individual reports at this zoom (lowered from 14.0)
 const double kZoomShowDetails = 16.0; // Show full details
 
-/// Minimum intensity for pulse visibility
-const double kMinPulseIntensity = 0.1;
+/// Minimum intensity for pulse visibility (lowered from 0.1 to 0.02 for longer visibility)
+const double kMinPulseIntensity = 0.02;
 
 /// Confidence thresholds
 const double kHighConfidenceThreshold = 0.7;
-const double kMediumConfidenceThreshold = 0.4;
+const double kMediumConfidenceThreshold = 0.2; // Lowered from 0.4 for more reports visible
 
 class SafetyProvider with ChangeNotifier {
   List<SafetyReport> _reports = [];

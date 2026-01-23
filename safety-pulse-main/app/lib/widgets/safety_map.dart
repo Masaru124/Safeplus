@@ -11,8 +11,8 @@ import 'package:provider/provider.dart';
 import 'pulse_visualization.dart';
 import 'pulse_bottom_sheet.dart';
 
-/// Zoom threshold for showing individual reports
-const double kZoomShowIndividual = 14.0;
+/// Zoom threshold for showing individual reports (lowered from 14.0 to 13.0)
+const double kZoomShowIndividual = 13.0;
 
 /// Safety Map Widget
 ///

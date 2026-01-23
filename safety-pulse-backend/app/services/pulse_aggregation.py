@@ -30,11 +30,11 @@ from app.services.trust_scoring import TrustScoringService
 class PulseAggregationService:
     """Service for aggregating safety signals into pulse tiles"""
     
-    # Time decay half-life in hours
-    DECAY_HALF_LIFE_HOURS = 2.5
+    # Time decay half-life in hours (increased from 2.5 to 6 for slower decay)
+    DECAY_HALF_LIFE_HOURS = 6.0
     
-    # Time window for aggregation (6 hours)
-    AGGREGATION_WINDOW_HOURS = 6
+    # Time window for aggregation (increased from 6 to 12 hours for longer visibility)
+    AGGREGATION_WINDOW_HOURS = 12
     
     # Geohash precision for tile identification
     GEOHASH_PRECISION = 6
@@ -571,11 +571,11 @@ class PulseDecayService:
         """
         Calculate decay factor based on time since last update.
         
-        Rules:
-        - < 30 min: Full intensity (1.0)
-        - 30-120 min: Gradual fade (0.8-1.0)
-        - 6 hours: Weak (0.3-0.5)
-        - 24 hours: Expire (0.0)
+        Rules (updated for 6-hour half-life):
+        - < 1 hour: Full intensity (1.0)
+        - 1-6 hours: Gradual fade (0.5-1.0)
+        - 12 hours: Weak (0.25-0.5)
+        - 48 hours: Expire (0.0)
         
         Args:
             last_updated: When the pulse was last updated
@@ -588,15 +588,15 @@ class PulseDecayService:
         
         age_hours = (datetime.now(timezone.utc) - last_updated).total_seconds() / 3600
         
-        if age_hours < 0.5:  # < 30 minutes
+        if age_hours < 1.0:  # < 1 hour
             return 1.0
-        elif age_hours < 2.0:  # 30 min - 2 hours
-            return max(0.8, 1.0 - (age_hours - 0.5) * 0.1)
-        elif age_hours < 6.0:  # 2-6 hours
-            return max(0.3, 0.8 - (age_hours - 2.0) * 0.125)
-        elif age_hours < 24.0:  # 6-24 hours
-            return max(0.05, 0.3 - (age_hours - 6.0) * 0.033)
-        else:  # > 24 hours
+        elif age_hours < 6.0:  # 1-6 hours
+            return max(0.5, 1.0 - (age_hours - 1.0) * 0.1)
+        elif age_hours < 12.0:  # 6-12 hours
+            return max(0.25, 0.5 - (age_hours - 6.0) * 0.042)
+        elif age_hours < 48.0:  # 12-48 hours
+            return max(0.02, 0.25 - (age_hours - 12.0) * 0.007)
+        else:  # > 48 hours
             return 0.0
     
     def decay_pulses(self) -> Dict[str, int]:
