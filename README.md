@@ -365,7 +365,8 @@ Once the backend is running, visit:
 
 ### Reporting Security Issues
 
-If you find a security vulnerability, please do **NOT** open a public issue. Instead, email us at security@safetypulse.example.com
+If you find a security vulnerability, please do **NOT** open a public issue. Instead, email us at masarukaze041@gmail.com
+
 
 ---
 
@@ -391,16 +392,13 @@ We just ask that you include the original copyright notice.
 
 ---
 
-## 📞 Get in Touch
+##  Get in Touch
 
-- 💬 **Discord**: [Join our community](https://discord.gg/safetypulse)
-- 🐦 **Twitter**: [@SafetyPulseApp](https://twitter.com/SafetyPulseApp)
-- 📧 **Email**: hello@safetypulse.example.com
+
+- 🐦 **Twitter**: [@SafetyPulseApp](https://x.com/kaze50664)
+- 📧 **Email**: masarukaze041@gmail.com
+
 
 ---
 
-<div align="center">
 
-**Made with ❤️ by the Safety Pulse Community**
-
-</div>
